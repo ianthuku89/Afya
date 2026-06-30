@@ -1,0 +1,481 @@
+// ──────────────────────────────────────────────────────────────────────────────
+// AfyaToken Platform — Prisma Database Schema
+// Security: AES-256-GCM encryption applied at application layer for PII fields.
+// DHA: Schema captures all required audit fields per Kenya Data Protection Act 2019.
+//
+// UHC: AfyaTokens are coverage-proof credentials. Patients accumulate tokens
+//      through SHIF contributions to prove active membership. Tokens are NOT
+//      used as payment at facilities. Facilities are reimbursed from Treasury.
+// ──────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USER ─────────────────────────────────────────────────────────────────────
+// DHA: nationalId and phoneNumber stored AES-256-GCM encrypted (see crypto.ts)
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  fullName     String
+  nationalId   String? // AES-256-GCM encrypted at application layer
+  phoneNumber  String? // AES-256-GCM encrypted
+  role         UserRole  @default(PATIENT)
+  shaId        String?   @unique // e.g. SHA-KE-2024-8821
+  countyCode   String?
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  wallet                Wallet?
+  afyaScore             AfyaScore?
+  auditLogs             AuditLog[]
+  refreshTokens         RefreshToken[]
+  patientClaims         Claim[]                @relation("PatientClaims")
+  reviewedClaims        Claim[]                @relation("ReviewedClaims")
+  Facility              Facility?
+  coverageVerifications CoverageVerification[] @relation("PatientVerifications")
+  AutoDeductionLog      AutoDeductionLog[]
+
+  @@index([email])
+  @@index([shaId])
+  @@map("users")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  SHA_ADMIN
+  FACILITY
+  PATIENT
+}
+
+// ─── AFYA SCORE ───────────────────────────────────────────────────────────────
+// Gamification engine: Composite score (0-1000) based on contribution consistency,
+// streak length, and cumulative amount. Drives informal worker engagement.
+model AfyaScore {
+  id                  String    @id @default(uuid())
+  userId              String    @unique
+  score               Int       @default(0) // 0-1000
+  tier                AfyaTier  @default(BRONZE)
+  streakDays          Int       @default(0) // Current consecutive contribution days
+  longestStreak       Int       @default(0) // All-time best streak
+  lastContributionAt  DateTime? // Last contribution timestamp
+  totalContributions  Decimal   @default(0) @db.Decimal(14, 2) // Cumulative KES contributed
+  totalTokensEarned   Decimal   @default(0) @db.Decimal(18, 8) // Cumulative AFYA tokens minted
+  weeklyTarget        Decimal   @default(100) @db.Decimal(14, 2) // Personalized weekly target
+  challengesCompleted Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tier])
+  @@index([score])
+  @@map("afya_scores")
+}
+
+enum AfyaTier {
+  BRONZE // 0-299 score: Basic SHIF coverage
+  SILVER // 300-599: Priority queuing at facilities
+  GOLD // 600-849: Dental + optical cover unlocked
+  PLATINUM // 850-1000: Family cover extension + premium services
+}
+
+// ─── WALLET ───────────────────────────────────────────────────────────────────
+// UHC: balanceAfya represents accumulated coverage-proof tokens.
+// Tokens are NOT spent at hospitals. coverageStatus tracks whether
+// the patient's SHIF membership is currently active.
+model Wallet {
+  id                  String         @id @default(uuid())
+  userId              String         @unique
+  blockchainAddress   String         @unique
+  balanceAfya         Decimal        @default(0) @db.Decimal(18, 8) // Coverage-proof token balance
+  lockedAfya          Decimal        @default(0) @db.Decimal(18, 8) // Locked during challenges
+  earnedMatchAfya     Decimal        @default(0) @db.Decimal(18, 8) // Gov't match bonus
+  coverageStatus      CoverageStatus @default(ACTIVE)
+  autoDeductOptIn     Boolean        @default(false) // KDPA compliant consent
+  pendingDeductionKES Decimal        @default(0) @db.Decimal(14, 2) // Batched for EOD Daraja Push
+  coverTypes          CoverType[]
+  isActive            Boolean        @default(true)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([userId])
+  @@index([blockchainAddress])
+  @@index([coverageStatus])
+  @@map("wallets")
+}
+
+enum CoverageStatus {
+  ACTIVE // Contributing regularly, coverage valid
+  LAPSED // Missed contributions, coverage at risk
+  SUSPENDED // Coverage suspended due to prolonged non-contribution
+}
+
+enum CoverType {
+  PRIMARY
+  EMERGENCY
+  CHRONIC
+  DENTAL
+  MATERNAL
+  OPTICAL
+}
+
+// ─── TRANSACTION ──────────────────────────────────────────────────────────────
+model Transaction {
+  id          String             @id @default(uuid())
+  txHash      String             @unique
+  fromAddress String
+  toAddress   String
+  amountAfya  Decimal            @db.Decimal(18, 8)
+  status      TxStatus           @default(PENDING)
+  source      ContributionSource @default(MPESA)
+  claimId     String?
+  blockNumber BigInt?
+  gasUsed     BigInt?
+  walletId    String?
+  createdAt   DateTime           @default(now())
+
+  wallet Wallet? @relation(fields: [walletId], references: [id])
+
+  @@index([txHash])
+  @@index([walletId])
+  @@index([status])
+  @@index([source])
+  @@map("transactions")
+}
+
+enum TxStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  FLAGGED
+}
+
+enum ContributionSource {
+  MPESA // Direct M-PESA STK Push contribution
+  AUTO_DEDUCT // Auto-deducted from an M-PESA user transaction
+  CHALLENGE_BONUS // AfyaScore challenge reward
+  GOV_MATCH // Government match top-up
+  CHAMA_BOOST // Chama rotating boost (Phase C)
+}
+
+// ─── COVERAGE VERIFICATION ───────────────────────────────────────────────────
+// UHC: Records each time a facility verifies a patient's coverage.
+// Privacy: Facilities see ONLY coverage status and tier — NOT contribution
+//          history, token balance, or financial details.
+model CoverageVerification {
+  id                String   @id @default(uuid())
+  patientId         String
+  facilityId        String
+  coverageTier      AfyaTier
+  coverageActive    Boolean
+  streakDaysAtVisit Int
+  qrPayload         String? // The QR code payload that was scanned
+  onChainTxHash     String? // On-chain visit record hash
+  verifiedAt        DateTime @default(now())
+
+  patient  User     @relation("PatientVerifications", fields: [patientId], references: [id])
+  facility Facility @relation("FacilityVerifications", fields: [facilityId], references: [id])
+
+  @@index([patientId])
+  @@index([facilityId])
+  @@index([verifiedAt])
+  @@map("coverage_verifications")
+}
+
+// ─── CLAIM ────────────────────────────────────────────────────────────────────
+// DHA: claimNumber, icd10Code, aiScore all required for DHA compliance reporting
+// UHC: Claims track facility reimbursement from Treasury, NOT patient payment.
+//      coverageVerified confirms patient had active coverage at time of visit.
+model Claim {
+  id                  String           @id @default(uuid())
+  claimNumber         String           @unique // e.g. CLM-44821
+  patientId           String
+  facilityId          String
+  service             ServiceType
+  icd10Code           String
+  reimbursementKES    Decimal          @db.Decimal(14, 2) // Treasury→Facility amount
+  reimbursementAfya   Decimal          @db.Decimal(18, 8) // AFYA token equivalent
+  coverageVerified    Boolean          @default(false) // Was patient covered at visit?
+  coverageTierAtVisit AfyaTier? // Patient's tier at time of visit
+  aiScore             Int              @default(0) // 0-100
+  aiFlags             String[]         @default([])
+  aiRecommendation    AIRecommendation @default(REVIEW)
+  status              ClaimStatus      @default(PENDING)
+  onChainHash         String?
+  reviewerId          String?
+  reviewNotes         String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  patient  User     @relation("PatientClaims", fields: [patientId], references: [id])
+  facility Facility @relation("FacilityClaims", fields: [facilityId], references: [id])
+  reviewer User?    @relation("ReviewedClaims", fields: [reviewerId], references: [id])
+  revenue  RevenueLedger?
+
+  @@index([patientId])
+  @@index([facilityId])
+  @@index([status])
+  @@index([claimNumber])
+  @@map("claims")
+}
+
+enum ServiceType {
+  OUTPATIENT
+  INPATIENT
+  SURGERY
+  EMERGENCY
+  MATERNAL
+  LAB_TESTS
+  PHARMACY
+  DENTAL
+  RADIOLOGY
+  OPTICAL
+}
+
+enum ClaimStatus {
+  PENDING
+  APPROVED
+  FLAGGED
+  REJECTED
+  REIMBURSED // Treasury has paid the facility
+}
+
+enum AIRecommendation {
+  APPROVE
+  REVIEW
+  BLOCK
+}
+
+// ─── FACILITY ─────────────────────────────────────────────────────────────────
+// DHA: Connected to DHA Facility Registry via mflCode
+model Facility {
+  id                String        @id @default(uuid())
+  mflCode           String        @unique // Ministry of Health Facility Code
+  name              String
+  level             FacilityLevel
+  county            String
+  subCounty         String
+  latitude          Float
+  longitude         Float
+  walletAddress     String        @unique
+  isAccredited      Boolean       @default(false)
+  fhirEnabled       Boolean       @default(false)
+  shaRegistrationNo String        @unique
+  contactPhone      String
+  userId            String?       @unique // Facility user account
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  claims                Claim[]                @relation("FacilityClaims")
+  user                  User?                  @relation(fields: [userId], references: [id])
+  coverageVerifications CoverageVerification[] @relation("FacilityVerifications")
+
+  @@index([county])
+  @@index([isAccredited])
+  @@map("facilities")
+}
+
+enum FacilityLevel {
+  LEVEL_2
+  LEVEL_3
+  LEVEL_4
+  LEVEL_5
+  LEVEL_6
+}
+
+// ─── AUTO-DEDUCTION LOG (Phase B: M-PESA Auto-Deduct Bridge) ───────────────
+// Tracks micro-deductions calculated from everyday M-PESA user transactions.
+// Users explicitly opt-in per Kenya Data Protection Act 2019.
+model AutoDeductionLog {
+  id             String           @id @default(uuid())
+  userId         String
+  originalTxId   String // E.g., The M-PESA reference for the bill paid
+  originalAmount Decimal          @db.Decimal(14, 2)
+  deductedAmount Decimal          @db.Decimal(14, 2)
+  status         AutoDeductStatus @default(PENDING) // PENDING (batched), PROCESSED (STK Push paid)
+  processedAt    DateTime?
+  createdAt      DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("auto_deduction_logs")
+}
+
+enum AutoDeductStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+// DHA: Immutable — no update or soft delete. Retained 7 years (KDPA 2019).
+// Security: INSERT only — no UPDATE/DELETE grants on this table in PostgreSQL role.
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String
+  resourceId String
+  action     AuditAction
+  timestamp  DateTime    @default(now())
+  ip         String
+  userAgent  String?
+  requestId  String
+  success    Boolean
+  errorCode  String?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([timestamp])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  VIEW_PATIENT
+  VIEW_CLAIM
+  CREATE_CLAIM
+  APPROVE_CLAIM
+  REJECT_CLAIM
+  REIMBURSE_CLAIM
+  VERIFY_COVERAGE
+  VIEW_AFYA_SCORE
+  VIEW_AUDIT_LOG
+  EXPORT_DATA
+  DELETE_DATA
+  CONSENT_UPDATE
+}
+
+// ─── REFRESH TOKENS ───────────────────────────────────────────────────────────
+// Security: Token family rotation — compromised refresh token invalidates family.
+model RefreshToken {
+  id        String    @id @default(uuid())
+  jti       String    @unique // JWT ID
+  userId    String
+  family    String // Token family — all tokens in family invalidated if theft detected
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([jti])
+  @@index([family])
+  @@map("refresh_tokens")
+}
+
+// ─── CONSENT RECORDS ──────────────────────────────────────────────────────────
+// DHA: ODPC-compliant granular consent management (KDPA 2019, Section 32)
+model ConsentRecord {
+  id          String    @id @default(uuid())
+  userId      String
+  consentType String // e.g. "share_with_facility", "ai_processing", "research", "loyalty_auto_contribute"
+  granted     Boolean
+  grantedAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  facilityId  String?
+  ipAddress   String
+
+  @@index([userId])
+  @@map("consent_records")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// SEABOARD INTERNAL PLATFORM
+// Dedicated models for Seaboard internal staff, roles, and financial tracking
+// ──────────────────────────────────────────────────────────────────────────────
+
+model InternalStaff {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  passwordHash String
+  fullName     String
+  role         InternalRole
+  isActive     Boolean      @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([email])
+  @@index([role])
+  @@map("internal_staff")
+}
+
+enum InternalRole {
+  SUPER_ADMIN
+  DIRECTOR
+  FINANCE
+  OFFICE_ADMIN
+  TECH
+  HR
+}
+
+// Track 1.75% fee per successful AfyaToken hospital claim
+model RevenueLedger {
+  id              String        @id @default(uuid())
+  claimId         String        @unique
+  claimAmountKES  Decimal       @db.Decimal(14, 2)
+  seaboardFeeKES  Decimal       @db.Decimal(14, 2) // 1.75%
+  status          RevenueStatus @default(UNBILLED)
+  invoiceId       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  claim           Claim         @relation(fields: [claimId], references: [id])
+  invoice         Invoice?      @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@index([status])
+  @@map("revenue_ledger")
+}
+
+model Invoice {
+  id               String        @id @default(uuid())
+  invoiceNumber    String        @unique // e.g. INV-2026-05
+  billingPeriod    String        // e.g. "May 2026"
+  totalClaims      Int
+  totalClaimAmount Decimal       @db.Decimal(14, 2)
+  totalFeeKES      Decimal       @db.Decimal(14, 2)
+  status           InvoiceStatus @default(DRAFT)
+  erpSyncStatus    String        @default("PENDING") // PENDING, SYNCED, FAILED
+  erpReferenceId   String?       // QuickBooks Invoice ID
+  erpSyncedAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  ledgerItems      RevenueLedger[]
+
+  @@index([status])
+  @@index([erpSyncStatus])
+  @@map("invoices")
+}
+
+enum RevenueStatus {
+  UNBILLED
+  BILLED
+  PAID
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT_TO_SHA
+  PAID
+}

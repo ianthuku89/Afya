@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+xgboost
+scikit-learn
+pandas
+numpy
+python-jose[cryptography]
+pydantic
+httpx
+joblib

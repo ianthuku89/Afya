@@ -1,0 +1,19 @@
+# Task: AfyaToken Renaming and Testing
+
+- [x] 1. Rename strings and variables across codebase
+  - [x] Create search-and-replace Node.js script.
+  - [x] Execute script to replace "Kenyan Healthcare Token" and "Kenya Health Token" with "AfyaToken".
+  - [x] Execute script to replace "KHT" with "AfyaToken".
+  - [x] Execute script to replace "kht" with "afyaToken".
+- [x] 2. Rename files
+  - [x] Find and rename files containing "KHT" or "kht" in their filename.
+- [x] 3. Fix compilation errors
+  - [x] Run `turbo run lint` and `turbo run type-check`.
+  - [x] Fix errors in `apps/mobile` (Type check passed).
+  - [x] Fix errors in `apps/api` (Fixed Prisma schema, Eslint missing).
+  - [x] Fix errors in `apps/web` (Type check passed).
+  - [x] Fix errors in `contracts` (Type check passed).
+- [ ] 4. Run Automated Tests
+  - [ ] Run `npm run test` in `apps/api` (Jest + Supertest) - ABORTED (System constraints).
+  - [x] Configure Android emulator for Detox - Pixel_4_API_31 created.
+  - [ ] Run Detox E2E tests for `apps/mobile` - `detox build` ABORTED (System constraints).

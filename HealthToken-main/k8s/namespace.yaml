@@ -1,0 +1,8 @@
+# KHT Platform — Kubernetes Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kht
+  labels:
+    app.kubernetes.io/part-of: kht-platform
+    environment: production

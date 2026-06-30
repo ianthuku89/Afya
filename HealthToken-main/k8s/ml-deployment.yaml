@@ -1,0 +1,69 @@
+# KHT ML Service — Deployment + Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kht-ml
+  namespace: kht
+  labels:
+    app: kht-ml
+    tier: ml
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kht-ml
+  template:
+    metadata:
+      labels:
+        app: kht-ml
+        tier: ml
+    spec:
+      containers:
+        - name: ml
+          image: ghcr.io/seaboard-technologies-ltd/kht-ml:latest
+          ports:
+            - containerPort: 8001
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: kht-secrets
+          env:
+            - name: ENV
+              value: "production"
+            - name: API_ORIGIN
+              value: "http://kht-api:3001"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kht-ml
+  namespace: kht
+spec:
+  selector:
+    app: kht-ml
+  ports:
+    - port: 8001
+      targetPort: 8001
+      protocol: TCP
+  type: ClusterIP

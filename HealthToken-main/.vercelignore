@@ -1,0 +1,72 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+*.tsbuildinfo
+dist/
+build/
+.next/
+out/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+coverage/
+.nyc_output/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Kubernetes
+k8s/
+
+# Smart Contracts (not deployed to web)
+contracts/
+
+# ML Service (separate service)
+ml-service/
+
+# Mobile app
+apps/mobile/
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Documentation
+*.md
+documentation/
+
+# Package managers
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+lerna-debug.log
+
+# Misc
+task.md
+task2/
+afyaToken_mockup.jsx
+afyaToken_walkthrough/
+replace.js
+implementation_plan.md

@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "AfyaToken Mobile",
+    "slug": "afyaToken-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.seaboard.healthtoken",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "AfyaToken uses Face ID to securely authenticate and decrypt your medical records.",
+        "NSLocationWhenInUseUsageDescription": "AfyaToken requires your location to map nearby SHA-accredited facilities."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.seaboard.healthtoken",
+      "versionCode": 1,
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "USE_BIOMETRIC"]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        { "locationAlwaysAndWhenInUsePermission": "Allow AfyaToken to use your location for finding hospitals." }
+      ],
+      [
+        "expo-local-authentication",
+        { "faceIDPermission": "Allow AfyaToken to securely lock your wallet." }
+      ]
+    ],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
