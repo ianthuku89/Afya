@@ -5,17 +5,10 @@
   "installCommand": "npm install",
   "framework": "nextjs",
   "env": {
-    "NODE_ENV": "production"
-    ,"CORPORATE_STANBIC_ACCOUNT": ""
+    "NODE_ENV": "production",
+    "CORPORATE_STANBIC_ACCOUNT": ""
   },
   "envPrefix": "NEXT_PUBLIC_",
-  "functions": {
-    "apps/api/**": {
-      "runtime": "nodejs20.x",
-      "maxDuration": 60,
-      "memory": 1024
-    }
-  },
   "builds": [
     {
       "src": "apps/web",
@@ -31,7 +24,10 @@
     },
     {
       "src": "apps/api/dist/server.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "maxLambdaSize": "15mb"
+      }
     }
   ],
   "routes": [
