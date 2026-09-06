@@ -15,7 +15,7 @@
     "scripts": {
         "dev": "tsx watch src/server.ts",
         "build": "prisma generate && tsc",
-        "vercel-build": "cd ../.. && npx turbo run build --filter=@afyaToken/api...",
+        "vercel-build": "cd ../.. && npm install && npm run build --workspace=@afyaToken/types && cd apps/api && prisma generate && tsc",
         "start": "node dist/server.js",
         "lint": "eslint src --ext .ts",
         "test": "jest --coverage",
