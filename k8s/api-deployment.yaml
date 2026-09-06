@@ -1,0 +1,73 @@
+# KHT API — Deployment + Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kht-api
+  namespace: kht
+  labels:
+    app: kht-api
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kht-api
+  template:
+    metadata:
+      labels:
+        app: kht-api
+        tier: backend
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/seaboard-technologies-ltd/kht-api:latest
+          ports:
+            - containerPort: 3001
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: kht-secrets
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3001"
+            - name: ML_SERVICE_URL
+              value: "http://kht-ml:8001"
+            - name: ALLOWED_ORIGINS
+              value: "https://kht.co.ke,https://admin.kht.co.ke"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kht-api
+  namespace: kht
+spec:
+  selector:
+    app: kht-api
+  ports:
+    - port: 3001
+      targetPort: 3001
+      protocol: TCP
+  type: ClusterIP

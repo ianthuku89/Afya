@@ -1,0 +1,44 @@
+{
+  "cli": {
+    "version": ">= 7.6.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": true
+      }
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "production": {
+      "channel": "production",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "ios": {
+        "autoIncrement": true
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "developer@seaboard.tech",
+        "ascAppId": "1234567890",
+        "appleTeamId": "A1B2C3D4E5"
+      },
+      "android": {
+        "serviceAccountKeyPath": "../google-play-service-account.json",
+        "track": "internal"
+      }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "name": "afyaToken-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AfyaToken (AfyaToken) Platform — Seaboard Technologies",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "contracts"
+  ],
+  "scripts": {
+    "build": "turbo run build --filter=./apps/*",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "type-check": "turbo run type-check",
+    "clean": "turbo run clean && rimraf node_modules",
+    "prod": "turbo run build && turbo run start",
+    "vercel-build": "turbo run build --filter=./apps/web --filter=./apps/internal --filter=./apps/seaboard"
+  },
+  "devDependencies": {
+    "turbo": "^1.13.0",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "turbo": {
+    "pipeline": {
+      "build": {
+        "dependsOn": [
+          "^build"
+        ],
+        "outputs": [
+          ".next/**",
+          "dist/**"
+        ],
+        "cache": false
+      },
+      "dev": {
+        "cache": false
+      },
+      "lint": {
+        "outputs": []
+      },
+      "type-check": {
+        "outputs": []
+      }
+    }
+  }
+}

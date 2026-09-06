@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AfyaToken Mobile Mockups</title>
+  <style>
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0B1223; color: #E2E8F0; }
+    .frame { max-width: 380px; margin: 32px auto; padding: 24px; border-radius: 32px; background: linear-gradient(180deg, rgba(15,23,42,0.98), rgba(15,23,42,0.96)); box-shadow: 0 30px 60px rgba(0,0,0,0.35); border: 1px solid rgba(148,163,184,0.12); }
+    h1, h2, h3 { margin: 0 0 12px; }
+    p { margin: 0 0 16px; line-height: 1.6; color: #CBD5E1; }
+    .badge { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px; background: rgba(16,185,129,0.16); color: #A7F3D0; font-size: 12px; font-weight: 700; }
+    .card { background: rgba(15,23,42,0.7); border: 1px solid rgba(148,163,184,0.14); border-radius: 24px; padding: 18px; margin-bottom: 18px; }
+    .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .stat { background: rgba(255,255,255,0.04); padding: 16px; border-radius: 18px; }
+    .stat strong { display: block; font-size: 14px; margin-top: 8px; color: #F8FAFC; }
+    .button { display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 14px 18px; border-radius: 18px; background: #10B981; border: none; color: white; font-weight: 700; cursor: pointer; margin-top: 10px; }
+    .secondary { background: rgba(255,255,255,0.08); border: 1px solid rgba(148,163,184,0.15); color: #E2E8F0; }
+    .table { border: 1px solid rgba(148,163,184,0.14); border-radius: 20px; overflow: hidden; }
+    .row { display: flex; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid rgba(148,163,184,0.1); }
+    .row:last-child { border-bottom: none; }
+    .row span { display: block; }
+    .row .label { color: #94A3B8; font-size: 12px; }
+    .row .value { font-weight: 700; color: #A7F3D0; text-align: right; }
+    .note { background: rgba(22,163,74,0.12); border: 1px solid rgba(16,185,129,0.2); border-radius: 18px; padding: 16px; font-size: 13px; }
+    .title-sm { color: #94A3B8; text-transform: uppercase; letter-spacing: 0.13em; font-size: 11px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <h1>Smart Auto-Deduct</h1>
+    <div class="badge">M-PESA Bridge</div>
+
+    <div class="card">
+      <h2>Build Your Cover Seamlessly</h2>
+      <p>We automatically map small micro-contributions to your regular Lipa na M-PESA spending. Your merchant still receives the full purchase amount, and we separately allocate a small SHIF contribution on top.</p>
+      <div class="note">
+        <strong>SHIF split rules</strong>
+        <p>When you pay a merchant with M-PESA, the purchase amount goes to the merchant and a small SHIF contribution is added automatically.</p>
+        <p>For most purchases, we save KES 10 to your SHIF account; for transactions above KES 1000, we save KES 50.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="stats">
+        <div class="stat"><span class="title-sm">Pending Batch</span><strong>KES 40 / 300 MAX</strong><span>Will be prompted at 7:00 PM</span></div>
+        <div class="stat"><span class="title-sm">This Month</span><strong>KES 850</strong><span>+132 AfyaScore</span></div>
+      </div>
+    </div>
+
+    <div class="card table">
+      <div class="row"><span class="label">KES 10 - KES 100</span><span class="value">KES 10</span></div>
+      <div class="row"><span class="label">KES 101 - KES 500</span><span class="value">KES 20</span></div>
+      <div class="row"><span class="label">KES 501 - KES 1000</span><span class="value">KES 50</span></div>
+      <div class="row"><span class="label">Above KES 1000</span><span class="value">KES 100</span></div>
+    </div>
+
+    <button class="button">Enable Auto-Deduct</button>
+  </div>
+
+  <div class="frame">
+    <h1>Boost Your Coverage</h1>
+    <p>Small daily amounts = big health protection.</p>
+
+    <div class="card">
+      <span class="title-sm">Contribute Today</span>
+      <h2>KES 500</h2>
+      <p>= 50 AfyaTokens toward your coverage</p>
+      <p class="note">≈ +20 AfyaScore points</p>
+    </div>
+
+    <div class="card">
+      <div class="row"><span class="label">Active Challenge</span><span class="value">7-day streak bonus</span></div>
+      <div class="row"><span class="label">Gov't Match</span><span class="value">+10% top-up</span></div>
+    </div>
+
+    <button class="button">Contribute via M-PESA</button>
+  </div>
+</body>
+</html>

@@ -1,0 +1,127 @@
+version: '3.9'
+
+# AfyaToken Platform — Local Development Stack
+# Security: secrets loaded from .env files; never committed to git
+# Run: docker compose up -d
+
+services:
+  # ── PostgreSQL 16 ───────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: afyaToken-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-afyaToken}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-afyaToken_dev_password}
+      POSTGRES_DB:       ${POSTGRES_DB:-afyaToken_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U afyaToken"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis 7 (JWT token blacklist & rate limit state) ────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: afyaToken-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev_pass} --appendonly yes
+    volumes:
+      - redisdata:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Hyperledger Besu (local dev chain) ──────────────────────────────────────
+  besu:
+    image: hyperledger/besu:latest
+    container_name: afyaToken-besu
+    restart: unless-stopped
+    command: >
+      --network=dev
+      --node-private-key-file=/opt/besu/keys/key
+      --rpc-http-enabled=true
+      --rpc-http-api=ETH,NET,WEB3,MINER,EEA
+      --rpc-http-host=0.0.0.0
+      --rpc-http-cors-origins=all
+      --miner-enabled=true
+      --min-gas-price=0
+    ports:
+      - "8545:8545"  # JSON-RPC
+      - "8546:8546"  # WebSocket
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8545"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  # ── AfyaToken Backend API ─────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: afyaToken-api
+    restart: unless-stopped
+    env_file: ./apps/api/.env
+    environment:
+      DATABASE_URL:    postgresql://afyaToken:${POSTGRES_PASSWORD:-afyaToken_dev_password}@postgres:5432/afyaToken_db
+      REDIS_URL:       redis://:${REDIS_PASSWORD:-redis_dev_pass}@redis:6379
+      ML_SERVICE_URL:  http://ml:8001
+      NODE_ENV:        development
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── ML Fraud Detection Service ───────────────────────────────────────────────
+  ml:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: afyaToken-ml
+    restart: unless-stopped
+    env_file: ./ml-service/.env
+    environment:
+      API_ORIGIN: http://api:3001
+      ENV:        development
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── Next.js Web Dashboard ────────────────────────────────────────────────────
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: afyaToken-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  redisdata:

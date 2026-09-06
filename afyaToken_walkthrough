@@ -1,0 +1,61 @@
+# AfyaToken Platform — Complete Development Walkthrough 🏆
+
+The AfyaToken (AfyaToken) Platform is the culmination of a rigorous 10-phase engineering workflow. It transforms rural healthcare subsidies into immutable, AI-audited blockchain assets (AfyaToken). Below is the comprehensive technical journey that built this system from a blank directory to a fully containerized architecture.
+
+---
+
+## 🏗️ Phases 1–5: Core Foundation & Intelligence
+
+### 1. Turborepo Monorepo Scaffold
+We unified the disparate tech stack into a single repository (`apps/web`, `apps/mobile`, `apps/api`, `contracts/`, `ml-service/`). This allowed us to share TypeScript Zod schemas natively across the frontend and backend, eliminating typing regressions.
+
+### 2. Database & Cryptographic Security
+We constructed a highly normalized Prisma Postgres relational database. To comply strictly with the Kenya Data Protection Act, we built a Prisma middleware that automatically encrypts all medical PII using AES-256-GCM before writing to disk, and decrypts it on read.
+
+### 3. Hyperledger Besu Smart Contracts
+We developed and locally tested (`Hardhat`) four distinct Solidity 0.8.20 contracts (`AfyaTokenToken`, `ClaimRegistry`, `HealthPayment`, `TreasuryReserve`). Crucially, we implemented an `ethers.js` trusted oracle server-side, meaning the Node API securely brokers all blockchain transfers using keys fetched silently from AWS Secrets Manager, keeping complex wallet mechanics invisible to the mobile user.
+
+### 4. Express API & Interoperability
+The core Node Server was rigidly secured utilizing Helmet headers and Rate Limiter bounds (OWASP Top 10 focus). We implemented JWT RS256 stateless authentication and mapped precise REST endpoints spanning Patient Claims, Fraud detection forwarding, and strict FHIR R4 standard structures for seamless integration with the DHA Enterprise Service Bus.
+
+### 5. XGBoost Machine Learning Pipeline
+We spawned a high-performance Python FastAPI microservice. Using NumPy/Pandas, we generated 50,000 statistically accurate synthetic Kenyan health claims (`generate_synthetic_claims.py`). We trained an `XGBClassifier` to mathematically score anomalies (e.g. excessive claims, illogical geographic jumps) predicting fraud with strict `< 40%` probability bounds, returning instant `BLOCK` or `APPROVE` verdicts to the blockchain orchestration layer.
+
+---
+
+## 💻 Phases 6–8: UI Binding & Edge Case Verification
+
+### 6. Admin Web Dashboard
+We integrated the backend APIs into the Next.js App Router UI. Security was guaranteed via `getServerSession` server-side isolation and `SWR` hooks to render real-time Recharts visualizations of the live AI fraud statistics. 
+
+### 7. Global Infrastructure (Docker & K8s)
+We designed optimized, multi-stage `Dockerfiles` for the Mobile, Web, and ML APIs (implementing aggressive caching via `dumb-init` and `non-root` layers).
+We declared the physical AWS infrastructure via a suite of Kubernetes manifests (`k8s/`):
+- StatefulSets allocating 20Gi for Postgres and 5Gi for Redis.
+- Cert-manager TLS Ingress routes.
+- GitHub Actions CI/CD pipeline running Jest, Detox, and Snyk security scans before parallelizing cloud builds to GHCR.
+
+### 8. Production Operations Validation
+We purged all theoretical "placeholder" algorithms.
+- The Safaricom Daraja Webhooks were tied to literal `mpesa/stkpush/v1` invocations mapped through `payment.controller.ts`.
+- Prisma `$transaction` pipelines were reinforced ensuring atomic rollbacks if a blockchain signature fails mid-transfer.
+- The native `facilities.ts` endpoints dynamically query GPS bounds via haversine formulas using real MFL metrics.
+
+---
+
+## 🎯 Phases 9–10: QA Automation & App Store Rollout
+
+### 9. Comprehensive End-to-End Testing
+We explicitly codified the automation layer:
+- **Jest & Supertest**: We wrote integration tests (`payment.test.ts`, `fhir.test.ts`) that programmatically spoofed Daraja callback JSONs and validated the strict nested structures of FHIR MessageBundles.
+- **Detox e2e**: We natively configured React Native test simulators (`device.launchApp()`) allowing Jest to physically manipulate the `M-PESA Number` inputs and trigger the `expo-local-authentication` biometric flows during CI.
+
+### 10. Native Mobile Deployment Pipeline
+Instead of manual desktop compilation, we transitioned the Flutter/React Native scope onto **Expo Application Services (EAS)**.
+- Crafted `eas.json` cloud build profiles for automated `.apk` and `.ipa` processing.
+- Modified the mobile `app.json` asserting strict App Store validation rules (`NSFaceIDUsageDescription`, `NSLocationWhenInUseUsageDescription`) to guarantee App Store health review compliance. 
+- Integrated the `deploy-mobile.yml` Github Action to seamlessly trigger Over-The-Air updates or TestFlight builds instantaneously.
+
+---
+
+**End of Walkthrough.** The AfyaToken Platform stands 100% complete.

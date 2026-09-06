@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production builds
+dist/
+build/
+.next/
+out/
+
+# Environment files — NEVER commit secrets
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Testing
+coverage/
+.nyc_output/
+
+# Turbo
+.turbo/
+
+# Hardhat artifacts
+contracts/artifacts/
+contracts/cache/
+contracts/typechain-types/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+ml-service/.venv/
+ml-service/venv/
+
+# Prisma
+apps/api/prisma/migrations/dev.db
+
+# Keys — never commit private keys
+*.pem
+*.p12
+*.key
+rsa_private.pem
+rsa_public.pem

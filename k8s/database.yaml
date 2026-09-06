@@ -1,0 +1,168 @@
+# KHT Platform — PostgreSQL StatefulSet + Service
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kht-postgres
+  namespace: kht
+  labels:
+    app: kht-postgres
+    tier: database
+spec:
+  serviceName: kht-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kht-postgres
+  template:
+    metadata:
+      labels:
+        app: kht-postgres
+        tier: database
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "kht"
+            - name: POSTGRES_DB
+              value: "kht_db"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kht-secrets
+                  key: DATABASE_URL
+          envFrom:
+            - secretRef:
+                name: kht-db-secret
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "kht"]
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "kht"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kht-postgres
+  namespace: kht
+spec:
+  selector:
+    app: kht-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None  # Headless for StatefulSet
+---
+# Redis StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kht-redis
+  namespace: kht
+  labels:
+    app: kht-redis
+    tier: cache
+spec:
+  serviceName: kht-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kht-redis
+  template:
+    metadata:
+      labels:
+        app: kht-redis
+        tier: cache
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command: ["redis-server", "--appendonly", "yes", "--requirepass", "$(REDIS_PASSWORD)"]
+          ports:
+            - containerPort: 6379
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kht-db-secret
+                  key: REDIS_PASSWORD
+          volumeMounts:
+            - name: redisdata
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: redisdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kht-redis
+  namespace: kht
+spec:
+  selector:
+    app: kht-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+  clusterIP: None
+---
+# Separate database secret (production: use External Secrets Operator)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kht-db-secret
+  namespace: kht
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "CHANGEME"
+  REDIS_PASSWORD: "CHANGEME"

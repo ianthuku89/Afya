@@ -1,0 +1,70 @@
+# KHT Web Dashboard — Deployment + Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kht-web
+  namespace: kht
+  labels:
+    app: kht-web
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kht-web
+  template:
+    metadata:
+      labels:
+        app: kht-web
+        tier: frontend
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/seaboard-technologies-ltd/kht-web:latest
+          ports:
+            - containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "https://api.kht.co.ke"
+            - name: NEXTAUTH_URL
+              value: "https://admin.kht.co.ke"
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: kht-secrets
+                  key: NEXTAUTH_SECRET
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kht-web
+  namespace: kht
+spec:
+  selector:
+    app: kht-web
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+  type: ClusterIP

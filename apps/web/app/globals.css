@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── CSS CUSTOM PROPERTIES (design tokens from mockup) ─── */
+:root {
+  --obsidian:    #0A0F1E;
+  --navy:        #0D1B3E;
+  --midnight:    #122354;
+  --emerald:     #006B3C;
+  --emerald-mid: #008B4A;
+  --emerald-lt:  #00C165;
+  --gold:        #D4A017;
+  --gold-lt:     #F0C040;
+  --scarlet:     #C0392B;
+  --scarlet-lt:  #E74C3C;
+  --ash:         #E8EDF5;
+  --slate:       #8A9BB5;
+  --glass:       rgba(255,255,255,0.06);
+  --glass-border:rgba(255,255,255,0.12);
+}
+
+/* ─── BASE ─────────────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--obsidian);
+  color: #ffffff;
+  font-family: 'DM Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── SCROLLBAR ─────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--emerald); border-radius: 2px; }
+
+/* ─── ANIMATIONS ────────────────────────────────────────────── */
+@keyframes pulse-dot   { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.85)} }
+@keyframes slide-up    { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+@keyframes token-spin  { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+@keyframes pop-in      { 0%{opacity:0;transform:scale(.92)} 100%{opacity:1;transform:scale(1)} }
+@keyframes shimmer     { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+@keyframes fade-in     { from{opacity:0} to{opacity:1} }
+@keyframes glow-pulse  { 0%,100%{box-shadow:0 0 20px rgba(0,193,101,0.3)} 50%{box-shadow:0 0 40px rgba(0,193,101,0.6)} }
+
+.slide-up  { animation: slide-up .45s ease both; }
+.pop-in    { animation: pop-in  .3s  ease both; }
+.fade-in   { animation: fade-in .3s  ease both; }
+.glow      { animation: glow-pulse 3s ease-in-out infinite; }
+
+/* ─── GLASS CARD ─────────────────────────────────────────────── */
+.glass-card {
+  background:     var(--glass);
+  border:         1px solid var(--glass-border);
+  border-radius:  16px;
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ─── BUTTONS ────────────────────────────────────────────────── */
+.btn-emerald {
+  background: linear-gradient(135deg, var(--emerald), var(--emerald-mid));
+  border: none; border-radius: 10px; color: #fff;
+  font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 13px;
+  cursor: pointer; transition: all .2s;
+  padding: 10px 18px; letter-spacing: .3px;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-emerald:hover { filter: brightness(1.15); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0,107,60,.4); }
+
+.btn-ghost {
+  background: transparent; border: 1px solid var(--glass-border);
+  border-radius: 10px; color: var(--slate);
+  font-family: 'DM Sans', sans-serif; font-weight: 500; font-size: 13px;
+  cursor: pointer; transition: all .2s; padding: 10px 18px;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-ghost:hover { border-color: var(--emerald-lt); color: var(--emerald-lt); }
+
+/* ─── BADGES ─────────────────────────────────────────────────── */
+.badge {
+  font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500;
+  padding: 3px 8px; border-radius: 6px; letter-spacing: .5px;
+  display: inline-block;
+}
+.badge-green  { background: rgba(0,193,101,.15);  color: var(--emerald-lt); }
+.badge-gold   { background: rgba(212,160,23,.15);  color: var(--gold-lt);   }
+.badge-red    { background: rgba(192,57,43,.18);   color: var(--scarlet-lt);}
+.badge-slate  { background: rgba(138,155,181,.12); color: var(--slate);     }
+.badge-blue   { background: rgba(78,163,255,.15);  color: #4EA3FF;          }
+
+/* ─── PROGRESS BAR ───────────────────────────────────────────── */
+.progress-track {
+  height: 6px; background: rgba(255,255,255,.06); border-radius: 3px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: 3px;
+  transition: width 1s cubic-bezier(.4,0,.2,1);
+}
+
+/* ─── MINI CHART SVG ─────────────────────────────────────────── */
+.chart-area { width: 100%; overflow: visible; }
+
+/* ─── TABLE ROWS ─────────────────────────────────────────────── */
+.table-row {
+  border-bottom: 1px solid var(--glass-border);
+  transition: background .15s;
+}
+.table-row:hover { background: rgba(255,255,255,.03); }
+
+/* ─── CODE BLOCK ─────────────────────────────────────────────── */
+.code-block {
+  background: rgba(0,0,0,.4); border-radius: 12px;
+  padding: 20px; font-family: 'DM Mono', monospace;
+  font-size: 12px; line-height: 1.8; overflow-x: auto;
+}
