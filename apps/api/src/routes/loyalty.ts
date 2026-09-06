@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
-import type { AutoDeductionLog } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { authenticate } from '../middleware/auth';
 import { initiateSHIFDeduction, initiateDarajaStkPush } from '../controllers/payment.controller';
@@ -28,10 +27,7 @@ async function getTodayDeductionStatus(userId: string) {
     });
 
     const alreadyDeducted = todayLogs.length > 0;
-    const totalDeductedToday = todayLogs.reduce(
-        (sum: number, log: AutoDeductionLog) => sum + Number(log.deductedAmount),
-        0
-    );
+    const totalDeductedToday = todayLogs.reduce((sum, log) => sum + Number(log.deductedAmount), 0);
 
     return { alreadyDeducted, totalDeductedToday, todayLogs };
 }
@@ -106,7 +102,7 @@ router.get('/auto-deduct/status', async (req, res) => {
                 minQualifyingTxKES: MIN_QUALIFYING_MERCHANT_TX,
                 shaPaybill: SHA_SHIF_PAYBILL,
                 shaAccountNumber: wallet.user?.nationalId || 'National ID',
-                recentLogs: todayLogs.slice(0, 5).map((log: AutoDeductionLog) => ({
+                recentLogs: todayLogs.slice(0, 5).map((log) => ({
                     id: log.id,
                     tx: log.originalTxId,
                     originalAmt: Number(log.originalAmount),

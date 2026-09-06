@@ -14,8 +14,8 @@
     },
     "scripts": {
         "dev": "tsx watch src/server.ts",
-        "build": "tsc",
-        "vercel-build": "tsc",
+        "build": "prisma generate && tsc",
+        "vercel-build": "prisma generate && tsc",
         "start": "node dist/server.js",
         "lint": "eslint src --ext .ts",
         "test": "jest --coverage",
