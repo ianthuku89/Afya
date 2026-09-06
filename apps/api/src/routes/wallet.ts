@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
 import { logger } from '../lib/logger';
+import type { Transaction } from '@prisma/client';
 
 export const walletRouter = Router();
 
@@ -60,7 +61,7 @@ walletRouter.get('/history', async (req, res, next) => {
 
         res.json({
             success: true,
-            transactions: history.map(tx => ({
+            transactions: history.map((tx: Transaction) => ({
                 id: tx.id,
                 txHash: tx.txHash,
                 amountAfya: Number(tx.amountAfya),

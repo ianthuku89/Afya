@@ -4,6 +4,7 @@ import { authenticate, authorize } from '../middleware/auth';
 import { UserRole } from '@afyaToken/types';
 import { logger } from '../lib/logger';
 import crypto from 'crypto';
+import type { Prisma } from '@prisma/client';
 
 export const coverageRouter = Router();
 
@@ -22,6 +23,16 @@ interface CoverageQRPayload {
     expiresAt: number;           // Valid for 5 minutes
     verificationToken: string;   // HMAC signature for tamper detection
 }
+
+// Prisma payload types matching the `include`/`select` shapes used below,
+// so the .map() callbacks don't fall back to implicit `any`.
+type RecentVerificationWithFacility = Prisma.CoverageVerificationGetPayload<{
+    include: { facility: { select: { name: true; mflCode: true } } };
+}>;
+
+type HistoryVerificationWithFacility = Prisma.CoverageVerificationGetPayload<{
+    include: { facility: { select: { name: true; mflCode: true; county: true } } };
+}>;
 
 function generateVerificationToken(data: string): string {
     const secret = process.env.COVERAGE_HMAC_SECRET || process.env.JWT_SECRET || 'afya-coverage-secret';
@@ -236,7 +247,7 @@ coverageRouter.get('/status', async (req, res, next) => {
                 coverTypes: wallet.coverTypes,
                 coveredServices,
                 daysUntilLapse,
-                recentVisits: recentVerifications.map(v => ({
+                recentVisits: recentVerifications.map((v: RecentVerificationWithFacility) => ({
                     facilityName: v.facility.name,
                     facilityCode: v.facility.mflCode,
                     coverageVerified: v.coverageActive,
@@ -267,7 +278,7 @@ coverageRouter.get('/history', async (req, res, next) => {
 
         res.json({
             success: true,
-            data: verifications.map(v => ({
+            data: verifications.map((v: HistoryVerificationWithFacility) => ({
                 id: v.id,
                 facilityName: v.facility.name,
                 facilityCode: v.facility.mflCode,
