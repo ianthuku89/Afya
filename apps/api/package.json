@@ -15,6 +15,7 @@
     "scripts": {
         "dev": "tsx watch src/server.ts",
         "build": "tsc",
+        "vercel-build": "tsc",
         "start": "node dist/server.js",
         "lint": "eslint src --ext .ts",
         "test": "jest --coverage",

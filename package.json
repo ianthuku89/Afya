@@ -16,7 +16,7 @@
     "type-check": "turbo run type-check",
     "clean": "turbo run clean && rimraf node_modules",
     "prod": "turbo run build && turbo run start",
-    "vercel-build": "turbo run build --filter=./apps/web --filter=./apps/internal --filter=./apps/seaboard"
+    "vercel-build": "turbo run build --filter=./apps/web --filter=./apps/internal --filter=./apps/seaboard --filter=./apps/api"
   },
   "devDependencies": {
     "turbo": "^1.13.0",
