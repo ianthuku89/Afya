@@ -3,7 +3,6 @@
   "buildCommand": "npm run vercel-build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
-  "framework": "nextjs",
   "env": {
     "NODE_ENV": "production",
     "CORPORATE_STANBIC_ACCOUNT": ""

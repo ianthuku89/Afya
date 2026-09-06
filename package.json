@@ -16,38 +16,15 @@
     "type-check": "turbo run type-check",
     "clean": "turbo run clean && rimraf node_modules",
     "prod": "turbo run build && turbo run start",
-    "vercel-build": "turbo run build --filter=./apps/web --filter=./apps/internal --filter=./apps/seaboard --filter=./apps/api"
+    "vercel-build": "turbo run build --filter=./apps/web... --filter=./apps/internal... --filter=./apps/seaboard... --filter=./apps/api..."
   },
   "devDependencies": {
-    "turbo": "^1.13.0",
+    "turbo": "^2.1.0",
     "rimraf": "^5.0.5",
     "typescript": "^5.4.0"
   },
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
-  },
-  "turbo": {
-    "pipeline": {
-      "build": {
-        "dependsOn": [
-          "^build"
-        ],
-        "outputs": [
-          ".next/**",
-          "dist/**"
-        ],
-        "cache": false
-      },
-      "dev": {
-        "cache": false
-      },
-      "lint": {
-        "outputs": []
-      },
-      "type-check": {
-        "outputs": []
-      }
-    }
   }
 }
