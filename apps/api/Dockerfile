@@ -14,8 +14,7 @@ COPY apps/api/package.json apps/api/package.json
 # Copy shared types package
 COPY packages/ packages/
 
-RUN npm ci --workspace=apps/api --include-workspace-root
-
+RUN npm install --workspace=apps/api --include-workspace-root
 # Copy Prisma schema and generate client
 COPY apps/api/prisma apps/api/prisma
 RUN npx prisma generate --schema=apps/api/prisma/schema.prisma
