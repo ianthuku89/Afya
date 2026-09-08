@@ -1,7 +1,5 @@
 {
   "version": 2,
-  "buildCommand": "npm run vercel-build",
-  "devCommand": "npm run dev",
   "installCommand": "npm install",
   "env": {
     "NODE_ENV": "production",
@@ -9,15 +7,15 @@
   },
   "builds": [
     {
-      "src": "apps/web",
+      "src": "apps/web/package.json",
       "use": "@vercel/next"
     },
     {
-      "src": "apps/internal",
+      "src": "apps/internal/package.json",
       "use": "@vercel/next"
     },
     {
-      "src": "apps/seaboard",
+      "src": "apps/seaboard/package.json",
       "use": "@vercel/next"
     },
     {
@@ -35,19 +33,19 @@
     },
     {
       "src": "/admin/(.*)",
-      "dest": "apps/web"
+      "dest": "apps/web/$1"
     },
     {
       "src": "/internal/(.*)",
-      "dest": "apps/internal"
+      "dest": "apps/internal/$1"
     },
     {
       "src": "/seaboard/(.*)",
-      "dest": "apps/seaboard"
+      "dest": "apps/seaboard/$1"
     },
     {
       "src": "/(.*)",
-      "dest": "apps/web"
+      "dest": "apps/web/$1"
     }
   ],
   "regions": [
