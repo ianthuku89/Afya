@@ -5,7 +5,6 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
   productionBrowserSourceMaps: false,
-  swcMinify: true,
   reactStrictMode: true,
   images: {
     formats: ['image/avif', 'image/webp'],
@@ -13,9 +12,6 @@ const nextConfig: NextConfig = {
   },
   typescript: {
     tsconfigPath: './tsconfig.json',
-  },
-  eslint: {
-    dirs: ['app', 'src'],
   },
   headers: async () => {
     return [
