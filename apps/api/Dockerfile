@@ -14,7 +14,11 @@ COPY apps/api/package.json apps/api/package.json
 # Copy shared types package
 COPY packages/ packages/
 
-RUN npm install --workspace=apps/api --include-workspace-root
+RUN npm install --include-workspace-root
+
+# Build shared types package before anything that depends on it
+RUN npm run build --workspace=@afyaToken/types
+
 # Copy Prisma schema and generate client
 COPY apps/api/prisma apps/api/prisma
 RUN npx prisma generate --schema=apps/api/prisma/schema.prisma
@@ -22,7 +26,7 @@ RUN npx prisma generate --schema=apps/api/prisma/schema.prisma
 # Copy API source and compile
 COPY apps/api/ apps/api/
 WORKDIR /app/apps/api
-RUN npx tsc --project tsconfig.json || true
+RUN npx tsc --project tsconfig.json
 
 # Stage 2: production image
 FROM node:20-alpine AS runner
