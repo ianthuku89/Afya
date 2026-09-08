@@ -60,8 +60,14 @@ export default function RegisterPage() {
 
     return (
         <div style={{ minHeight: '100vh', display: 'flex', background: '#0A0F1E' }}>
+            <style jsx>{`
+                @media (min-width: 900px) {
+                    .visual-panel { display: block !important; }
+                }
+            `}</style>
+
             {/* Left Side: Visual Panel */}
-            <div style={{ flex: 1, display: 'none', '@media (minWidth: 900px)': { display: 'block' }, position: 'relative', overflow: 'hidden' }}>
+            <div className="visual-panel" style={{ flex: 1, display: 'none', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundImage: 'url(/afyatoken-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center' }} />
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'linear-gradient(135deg, rgba(0,107,60,0.8), rgba(10,15,30,0.9))' }} />
                 
