@@ -13,9 +13,6 @@ const nextConfig: NextConfig = {
   typescript: {
     tsconfigPath: './tsconfig.json',
   },
-  eslint: {
-    dirs: ['app', 'src'],
-  },
   headers: async () => {
     return [
       {
