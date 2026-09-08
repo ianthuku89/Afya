@@ -5,7 +5,6 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
   productionBrowserSourceMaps: false,
-  swcMinify: true,
   reactStrictMode: true,
   images: {
     formats: ['image/avif', 'image/webp'],
