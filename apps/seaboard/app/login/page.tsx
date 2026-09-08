@@ -47,6 +47,12 @@ export default function InternalLoginPage() {
 
     return (
         <div style={{ minHeight: '100vh', display: 'flex', background: '#050B14' }}>
+            <style jsx>{`
+                @media (min-width: 900px) {
+                    .right-visual-panel { display: block !important; }
+                }
+            `}</style>
+
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 2 }}>
                 <div style={{ width: '100%', maxWidth: 400, background: '#0A1224', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 16, padding: 40, boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
                     <div style={{ marginBottom: 32, textAlign: 'center' }}>
@@ -101,7 +107,7 @@ export default function InternalLoginPage() {
             </div>
             
             {/* Right Side Visual (Abstract Corporate) */}
-            <div style={{ flex: 1.2, display: 'none', '@media (minWidth: 900px)': { display: 'block' }, position: 'relative', overflow: 'hidden', background: '#0A1224' }}>
+            <div className="right-visual-panel" style={{ flex: 1.2, display: 'none', position: 'relative', overflow: 'hidden', background: '#0A1224' }}>
                 {/* Abstract grid and glowing nodes to represent enterprise data */}
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundImage: 'radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.1) 0%, transparent 50%), linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)', backgroundSize: '100% 100%, 40px 40px, 40px 40px', backgroundPosition: 'center, center, center' }} />
                 
