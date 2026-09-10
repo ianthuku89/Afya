@@ -42,6 +42,7 @@ COPY --from=builder --chown=afyaTokenapi:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=afyaTokenapi:nodejs /app/apps/api/package.json ./package.json
 COPY --from=builder --chown=afyaTokenapi:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=afyaTokenapi:nodejs /app/apps/api/node_modules ./api_modules
+COPY --from=builder --chown=afyaTokenapi:nodejs /app/packages ./packages
 
 ENV NODE_ENV=production
 ENV PORT=3001
