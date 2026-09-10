@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize } from '../middleware/auth.js';
 import { UserRole } from '@afyaToken/types';
-import { prisma } from '../lib/prisma';
+import { prisma } from '../lib/prisma.js';
 
 export const fraudRouter = Router();
 
@@ -60,3 +60,4 @@ fraudRouter.get('/anomalies', authorize(UserRole.SUPER_ADMIN, UserRole.SHA_ADMIN
         next(err);
     }
 });
+

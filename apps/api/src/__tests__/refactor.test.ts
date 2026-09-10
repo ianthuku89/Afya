@@ -1,4 +1,4 @@
-import { getTierFromStreak, TIER_STREAK_THRESHOLDS, TIER_PERKS } from '../routes/afyascore';
+import { getTierFromStreak, TIER_STREAK_THRESHOLDS, TIER_PERKS } from '../routes/afyascore.js';
 
 describe('Streak-Based Tier & Preventive Package Logic (AfyaToken Infographic)', () => {
     it('correctly maps streak days to tiers per infographic', () => {
@@ -41,3 +41,4 @@ describe('Streak-Based Tier & Preventive Package Logic (AfyaToken Infographic)',
         expect(TIER_PERKS.PLATINUM).toContain('Priority booking at Level 4 & 5 hospitals');
     });
 });
+

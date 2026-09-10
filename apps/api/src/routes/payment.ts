@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { paymentController } from '../controllers/payment.controller';
-import { authenticate } from '../middleware/auth';
+import { paymentController } from '../controllers/payment.controller.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -17,3 +17,4 @@ router.post('/callback', paymentController.darajaCallback);
 router.post('/shif-callback', paymentController.darajaSHIFCallback);
 
 export const paymentRouter = router;
+

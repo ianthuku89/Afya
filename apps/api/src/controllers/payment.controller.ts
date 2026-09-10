@@ -1,11 +1,11 @@
 import crypto from 'crypto';
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { logger } from '../lib/logger';
-import { prisma } from '../lib/prisma';
-import { blockchainService } from '../services/blockchain.service';
-import { creditShifAccount } from '../services/shifService';
-import { getTierFromStreak } from '../routes/afyascore';
+import { logger } from '../lib/logger.js';
+import { prisma } from '../lib/prisma.js';
+import { blockchainService } from '../services/blockchain.service.js';
+import { creditShifAccount } from '../services/shifService.js';
+import { getTierFromStreak } from '../routes/afyascore.js';
 import { ContributionSource } from '@prisma/client';
 
 // ── SHA SHIF COLLECTION PAYBILL ───────────────────────────────────────────────
@@ -630,3 +630,4 @@ export const paymentController = {
         }
     },
 };
+

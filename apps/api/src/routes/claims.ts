@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { prisma } from '../lib/prisma';
-import { authenticate } from '../middleware/auth';
-import { authorize } from '../middleware/auth';
-import { validate } from '../middleware/validate';
+import { prisma } from '../lib/prisma.js';
+import { authenticate } from '../middleware/auth.js';
+import { authorize } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
 import { UserRole, AuditAction } from '@afyaToken/types';
 
 export const claimsRouter = Router();
@@ -127,3 +127,4 @@ claimsRouter.patch('/:id/review', authorize(UserRole.SUPER_ADMIN, UserRole.SHA_A
         res.json({ success: true, data: claim });
     } catch (err) { next(err); }
 });
+

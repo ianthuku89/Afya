@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { prisma } from '../lib/prisma';
+import { prisma } from '../lib/prisma.js';
 import { AuditAction } from '@afyaToken/types';
 
 /**
@@ -37,3 +37,4 @@ export function auditMiddleware(req: Request, _res: Response, next: NextFunction
     };
     next();
 }
+

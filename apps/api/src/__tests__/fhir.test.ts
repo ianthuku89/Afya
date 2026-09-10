@@ -12,7 +12,7 @@ jest.mock('../middleware/auth', () => ({
     }
 }));
 
-import { createApp } from '../app';
+import { createApp } from '../app.js';
 
 describe('FHIR R4 Implementation Endpoints', () => {
     let app: any;
@@ -61,3 +61,4 @@ describe('FHIR R4 Implementation Endpoints', () => {
     });
 
 });
+

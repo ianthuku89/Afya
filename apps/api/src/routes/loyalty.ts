@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { logger } from '../lib/logger';
-import { authenticate } from '../middleware/auth';
-import { initiateSHIFDeduction, initiateDarajaStkPush } from '../controllers/payment.controller';
+import { logger } from '../lib/logger.js';
+import { authenticate } from '../middleware/auth.js';
+import { initiateSHIFDeduction, initiateDarajaStkPush } from '../controllers/payment.controller.js';
 
 const router = Router();
 const prisma = new PrismaClient();

@@ -1,4 +1,4 @@
-import { logger } from '../lib/logger';
+import { logger } from '../lib/logger.js';
 
 const DHA_API_URL = process.env.DHA_API_URL;
 const DHA_API_KEY = process.env.DHA_API_KEY;
@@ -44,3 +44,4 @@ export async function creditShifAccount(
         return { success: false, reason: 'EXCEPTION', error: e.message };
     }
 }
+

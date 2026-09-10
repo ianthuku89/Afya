@@ -70,3 +70,4 @@ export function safeEqual(a: string, b: string): boolean {
     }
     return mismatch === 0;
 }
+

@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { prisma } from '../lib/prisma';
-import { authenticate, authorize } from '../middleware/auth';
+import { prisma } from '../lib/prisma.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 import { UserRole } from '@afyaToken/types';
-import { logger } from '../lib/logger';
+import { logger } from '../lib/logger.js';
 import crypto from 'crypto';
 
 export const coverageRouter = Router();

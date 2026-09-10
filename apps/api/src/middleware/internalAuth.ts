@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken } from '../lib/jwt';
+import { verifyAccessToken } from '../lib/jwt.js';
 
 // Extend Express Request
 declare global {
@@ -58,3 +58,4 @@ export function authorizeInternal(roles: string[]) {
         next();
     };
 }
+

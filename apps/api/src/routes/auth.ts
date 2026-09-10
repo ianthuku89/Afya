@@ -3,11 +3,11 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { ethers } from 'ethers';
 import { z } from 'zod';
-import { prisma } from '../lib/prisma';
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt';
-import { validate } from '../middleware/validate';
-import { authenticate } from '../middleware/auth';
-import { encrypt } from '../lib/crypto';
+import { prisma } from '../lib/prisma.js';
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt.js';
+import { validate } from '../middleware/validate.js';
+import { authenticate } from '../middleware/auth.js';
+import { encrypt } from '../lib/crypto.js';
 
 export const authRouter = Router();
 
@@ -181,3 +181,4 @@ authRouter.post('/logout', authenticate, async (req, res, next) => {
         res.json({ success: true, data: { message: 'Logged out successfully' } });
     } catch (err) { next(err); }
 });
+

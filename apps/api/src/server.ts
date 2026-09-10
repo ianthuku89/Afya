@@ -1,5 +1,5 @@
-import { createApp } from './app';
-import { logger } from './lib/logger';
+import { createApp } from './app.js';
+import { logger } from './lib/logger.js';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -16,3 +16,4 @@ main().catch((err) => {
     logger.error('Failed to start server:', err);
     process.exit(1);
 });
+

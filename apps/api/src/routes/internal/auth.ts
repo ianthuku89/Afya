@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { prisma } from '../../lib/prisma';
-import { signAccessToken } from '../../lib/jwt';
-import { authenticateInternal, authorizeInternal } from '../../middleware/internalAuth';
+import { prisma } from '../../lib/prisma.js';
+import { signAccessToken } from '../../lib/jwt.js';
+import { authenticateInternal, authorizeInternal } from '../../middleware/internalAuth.js';
 
 export const internalAuthRouter = Router();
 
@@ -76,3 +76,4 @@ internalAuthRouter.get('/staff', authorizeInternal(['SUPER_ADMIN', 'DIRECTOR']),
         res.json({ success: true, data: staff });
     } catch (err) { next(err); }
 });
+

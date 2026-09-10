@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { logger } from '../lib/logger';
+import { logger } from '../lib/logger.js';
 
 const STANBIC_API_URL = process.env.STANBIC_API_URL;
 const STANBIC_API_KEY = process.env.STANBIC_API_KEY;
@@ -39,3 +39,4 @@ export async function remitToCorporate(accountRef: string, amountKES: number) {
         return { success: false, reason: 'EXCEPTION', error: e.message };
     }
 }
+

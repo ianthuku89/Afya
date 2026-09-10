@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { prisma } from '../lib/prisma';
-import { authenticate, authorize } from '../middleware/auth';
+import { prisma } from '../lib/prisma.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 import { UserRole } from '@afyaToken/types';
 
 export const adminRouter = Router();
@@ -206,3 +206,4 @@ adminRouter.get('/blockchain', authorize(UserRole.SUPER_ADMIN), async (req: Requ
         });
     } catch (err) { next(err); }
 });
+

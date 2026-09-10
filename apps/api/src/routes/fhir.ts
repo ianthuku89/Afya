@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth';
-import { authorize } from '../middleware/auth';
-import { prisma } from '../lib/prisma';
+import { authenticate } from '../middleware/auth.js';
+import { authorize } from '../middleware/auth.js';
+import { prisma } from '../lib/prisma.js';
 import { UserRole } from '@afyaToken/types';
 
 // DHA: FHIR R4 endpoints required for DHA Enterprise Service Bus integration
@@ -185,3 +185,4 @@ fhirRouter.get('/r4/Practitioner/:id',
         } catch (err) { next(err); }
     }
 );
+

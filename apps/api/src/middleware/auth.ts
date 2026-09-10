@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken } from '../lib/jwt';
+import { verifyAccessToken } from '../lib/jwt.js';
 import { UserRole } from '@afyaToken/types';
 
 // Extend Express Request to carry decoded JWT payload
@@ -68,3 +68,4 @@ export function authorize(...roles: UserRole[]) {
         next();
     };
 }
+

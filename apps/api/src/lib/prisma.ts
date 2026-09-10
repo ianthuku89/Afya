@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { logger } from './logger';
+import { logger } from './logger.js';
 
 // Singleton pattern — prevents connection pool exhaustion in dev with hot reloads
 declare global {
@@ -17,4 +17,5 @@ export const prisma = global.__prisma ?? new PrismaClient({
 if (process.env.NODE_ENV !== 'production') {
     global.__prisma = prisma;
 }
+
 

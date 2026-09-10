@@ -5,23 +5,23 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 
-import { authRouter } from './routes/auth';
-import { claimsRouter } from './routes/claims';
-import { walletRouter } from './routes/wallet';
-import { fhirRouter } from './routes/fhir';
-import { facilitiesRouter } from './routes/facilities';
-import { fraudRouter } from './routes/fraud';
-import { adminRouter } from './routes/admin';
-import { paymentRouter } from './routes/payment';
-import { afyaScoreRouter } from './routes/afyascore';
-import { coverageRouter } from './routes/coverage';
-import { loyaltyRouter } from './routes/loyalty';
-import { ussdRouter } from './routes/ussd';
-import { licensingRouter } from './routes/licensing';
-import { internalAuthRouter } from './routes/internal/auth';
-import { internalFinanceRouter } from './routes/internal/finance';
-import { auditMiddleware } from './middleware/audit';
-import { logger } from './lib/logger';
+import { authRouter } from './routes/auth.js';
+import { claimsRouter } from './routes/claims.js';
+import { walletRouter } from './routes/wallet.js';
+import { fhirRouter } from './routes/fhir.js';
+import { facilitiesRouter } from './routes/facilities.js';
+import { fraudRouter } from './routes/fraud.js';
+import { adminRouter } from './routes/admin.js';
+import { paymentRouter } from './routes/payment.js';
+import { afyaScoreRouter } from './routes/afyascore.js';
+import { coverageRouter } from './routes/coverage.js';
+import { loyaltyRouter } from './routes/loyalty.js';
+import { ussdRouter } from './routes/ussd.js';
+import { licensingRouter } from './routes/licensing.js';
+import { internalAuthRouter } from './routes/internal/auth.js';
+import { internalFinanceRouter } from './routes/internal/finance.js';
+import { auditMiddleware } from './middleware/audit.js';
+import { logger } from './lib/logger.js';
 
 export function createApp(): Application {
     const app = express();
@@ -166,3 +166,4 @@ export function createApp(): Application {
 
     return app;
 }
+

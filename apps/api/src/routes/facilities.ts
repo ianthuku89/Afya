@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { prisma } from '../lib/prisma';
-import { authenticate } from '../middleware/auth';
-import { logger } from '../lib/logger';
+import { prisma } from '../lib/prisma.js';
+import { authenticate } from '../middleware/auth.js';
+import { logger } from '../lib/logger.js';
 
 export const facilitiesRouter = Router();
 
@@ -76,3 +76,4 @@ facilitiesRouter.get('/:id', async (req, res, next) => {
         next(err);
     }
 });
+

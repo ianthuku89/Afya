@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { logger } from '../lib/logger';
+import { logger } from '../lib/logger.js';
 
 // AfyaTokenToken ABI — minimal interface for oracle-signed server-side transactions
 const AfyaTokenTokenABI = [
@@ -80,4 +80,5 @@ export const blockchainService = {
     }
   }
 };
+
 

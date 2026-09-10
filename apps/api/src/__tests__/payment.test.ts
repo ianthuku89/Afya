@@ -44,7 +44,7 @@ jest.mock('../controllers/payment.controller', () => ({
     }
 }));
 
-import { createApp } from '../app';
+import { createApp } from '../app.js';
 
 describe('Safaricom Daraja Payment Integrations', () => {
     let app: any;
@@ -116,3 +116,4 @@ describe('Safaricom Daraja Payment Integrations', () => {
         expect(res.body.success).toBe(true);
     });
 });
+

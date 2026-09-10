@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { prisma } from '../../lib/prisma';
-import { authenticateInternal, authorizeInternal } from '../../middleware/internalAuth';
+import { prisma } from '../../lib/prisma.js';
+import { authenticateInternal, authorizeInternal } from '../../middleware/internalAuth.js';
 
 export const internalFinanceRouter = Router();
 
@@ -117,3 +117,4 @@ internalFinanceRouter.post('/invoices/:id/sync-quickbooks', authorizeInternal(['
         res.json({ success: true, data: updatedInvoice, simulatedQboPayload: qboPayload });
     } catch (err) { next(err); }
 });
+

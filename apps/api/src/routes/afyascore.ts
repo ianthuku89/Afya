@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { prisma } from '../lib/prisma';
-import { authenticate, authorize } from '../middleware/auth';
+import { prisma } from '../lib/prisma.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 import { UserRole } from '@afyaToken/types';
-import { logger } from '../lib/logger';
+import { logger } from '../lib/logger.js';
 
 export const afyaScoreRouter = Router();
 
@@ -274,3 +274,4 @@ afyaScoreRouter.get('/stats', authorize(UserRole.SUPER_ADMIN, UserRole.SHA_ADMIN
         next(err);
     }
 });
+

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
-import { logger } from '../lib/logger';
+import { logger } from '../lib/logger.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -48,3 +48,4 @@ router.post('/validate', async (req, res) => {
 });
 
 export const licensingRouter = router;
+
