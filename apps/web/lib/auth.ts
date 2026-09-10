@@ -6,29 +6,31 @@ export const authOptions: NextAuthOptions = {
         CredentialsProvider({
             name: "Credentials",
             credentials: {
-                phone: { label: "Phone Number", type: "text", placeholder: "+254700000000" },
+                email: { label: "Email", type: "text", placeholder: "you@example.com" },
                 password: { label: "Password", type: "password" }
             },
             async authorize(credentials) {
-                if (!credentials?.phone || !credentials?.password) return null;
+                if (!credentials?.email || !credentials?.password) return null;
 
                 try {
                     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
                     const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
                         method: 'POST',
-                        body: JSON.stringify({ phone: credentials.phone, password: credentials.password }),
+                        body: JSON.stringify({ email: credentials.email, password: credentials.password }),
                         headers: { "Content-Type": "application/json" }
                     });
 
-                    const data = await res.json();
+                    const result = await res.json();
 
-                    if (res.ok && data.user && data.accessToken) {
+                    // Backend responds with: { success: true, data: { accessToken, refreshToken, user } }
+                    if (res.ok && result.success && result.data?.user && result.data?.accessToken) {
+                        const { user, accessToken, refreshToken } = result.data;
                         return {
-                            id: data.user.id,
-                            name: data.user.name || data.user.phone,
-                            role: data.user.role,
-                            accessToken: data.accessToken,
-                            refreshToken: data.refreshToken
+                            id: user.id,
+                            name: user.fullName || user.email,
+                            role: user.role,
+                            accessToken,
+                            refreshToken
                         } as any;
                     }
                     return null;
@@ -62,5 +64,5 @@ export const authOptions: NextAuthOptions = {
         signIn: '/auth/signin',
     },
     session: { strategy: "jwt" },
-    secret: process.env.NEXTAUTH_SECRET || "afyaToken-dev-secret-do-not-use-in-prod-123",
+    secret: process.env.NEXTAUTH_SECRET,
 };
