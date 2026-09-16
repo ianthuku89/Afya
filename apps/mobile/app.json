@@ -21,6 +21,9 @@
       "infoPlist": {
         "NSFaceIDUsageDescription": "Allow AfyaToken to securely lock your wallet.",
         "NSLocationWhenInUseUsageDescription": "AfyaToken requires your location to map nearby SHA-accredited facilities."
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "android": {
@@ -37,8 +40,16 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "USE_BIOMETRIC",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT"
-      ]
+      ],
+      "runtimeVersion": "1.0.0"
     },
     "plugins": [
       [
@@ -62,6 +73,9 @@
         "projectId": "3fe08865-1867-475c-9be7-21ac549e848a"
       }
     },
-    "owner": "thuku0249s-team"
+    "owner": "thuku0249s-team",
+    "updates": {
+      "url": "https://u.expo.dev/3fe08865-1867-475c-9be7-21ac549e848a"
+    }
   }
 }

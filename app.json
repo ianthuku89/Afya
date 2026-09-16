@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "d7be817e-88ec-4db0-accc-faffca27e99c"
+      }
+    },
+    "android": {
+      "package": "com.thuku0249.afyatokenplatform"
+    }
+  }
+}
