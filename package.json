@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "packageManager": "npm@10.8.2",
+  "main": "apps/mobile/index.js",
   "description": "AfyaToken (AfyaToken) Platform — Seaboard Technologies",
   "workspaces": [
     "apps/*",

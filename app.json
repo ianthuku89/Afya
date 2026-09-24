@@ -1,12 +1,18 @@
 {
   "expo": {
+    "name": "AfyaToken Mobile",
+    "slug": "afyaToken-mobile",
+    "entryPoint": "./apps/mobile/index.js",
     "extra": {
       "eas": {
-        "projectId": "d7be817e-88ec-4db0-accc-faffca27e99c"
+        "projectId": "3fe08865-1867-475c-9be7-21ac549e848a"
       }
     },
     "android": {
-      "package": "com.thuku0249.afyatokenplatform"
+      "package": "com.seaboard.healthtoken"
+    },
+    "ios": {
+      "bundleIdentifier": "com.seaboard.healthtoken"
     }
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "@healthtoken/mobile",
   "version": "1.0.0",
-  "main": "node_modules/expo/AppEntry.js",
+  "main": "./index.js",
   "scripts": {
     "dev": "expo start",
     "android": "expo run:android",

@@ -58,3 +58,7 @@ apps/api/prisma/migrations/dev.db
 *.key
 rsa_private.pem
 rsa_public.pem
+
+.expo/
+.android/
+.ios/

@@ -6,11 +6,12 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 const debuggerHost = Constants.expoConfig?.hostUri;
-let API_URL = 'http://localhost:3001/api/v1';
+const productionApiUrl = Constants.expoConfig?.extra?.apiUrl ?? 'https://api.kht.co.ke/api/v1';
+let API_URL = productionApiUrl;
 
 if (debuggerHost) {
   API_URL = `http://${debuggerHost.split(':')[0]}:3001/api/v1`;
-} else if (Platform.OS === 'android') {
+} else if (__DEV__ && Platform.OS === 'android') {
   API_URL = 'http://10.0.2.2:3001/api/v1';
 }
 export const client = axios.create({
