@@ -38,11 +38,11 @@ client.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
+
     // If 401 Unauthorized and we haven't retried yet
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-      
+
       try {
         const refreshToken = await SecureStore.getItemAsync('refresh_token');
         if (!refreshToken) {
@@ -50,15 +50,18 @@ client.interceptors.response.use(
         }
 
         // Try to refresh
-        const { data } = await axios.post(`${API_URL}/auth/refresh`, {
+        // Backend wraps responses as { success, data: {...} }, so the
+        // actual tokens are one level deeper than the axios `data` field.
+        const { data: body } = await axios.post(`${API_URL}/auth/refresh`, {
           refreshToken
         });
+        const { accessToken, refreshToken: newRefreshToken } = body.data;
 
         // Store new tokens
-        await useAuthStore.getState().setTokens(data.accessToken, data.refreshToken);
+        await useAuthStore.getState().setTokens(accessToken, newRefreshToken);
 
         // Update authorization header & retry original request
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return client(originalRequest);
       } catch (refreshError) {
         // Refresh failed, log out
@@ -66,7 +69,7 @@ client.interceptors.response.use(
         return Promise.reject(refreshError);
       }
     }
-    
+
     return Promise.reject(error);
   }
 );

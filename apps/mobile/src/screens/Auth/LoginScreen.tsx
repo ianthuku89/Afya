@@ -15,12 +15,13 @@ export default function LoginScreen() {
     if (!email || !password) return;
     setLoading(true);
     try {
-      // Assuming backend expects { email, password }
+      // Backend wraps responses as { success, data: {...} }, so the
+      // actual payload is one level deeper than res.data.
       const res = await client.post('/auth/login', { email, password });
-      const { user, accessToken, refreshToken } = res.data;
+      const { user, accessToken, refreshToken } = res.data.data;
       await login(user, accessToken, refreshToken);
     } catch (e: any) {
-      Alert.alert("Login Failed", e.response?.data?.message || e.message);
+      Alert.alert("Login Failed", e.response?.data?.error?.message || e.response?.data?.message || e.message);
     } finally {
       setLoading(false);
     }
@@ -60,7 +61,7 @@ export default function LoginScreen() {
         </View>
       </View>
 
-      <TouchableOpacity 
+      <TouchableOpacity
         className="bg-teal-500 rounded-xl py-4 items-center mb-6 shadow-sm"
         onPress={handleLogin}
         disabled={loading}
