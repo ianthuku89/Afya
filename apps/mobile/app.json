@@ -37,7 +37,7 @@
     ],
     "web": { "favicon": "./assets/favicon.png" },
     "extra": {
-      "apiUrl": "https://api.kht.co.ke/api/v1",
+      "apiUrl": "https://afya-cvq5.onrender.com/api/v1",
       "eas": { "projectId": "3fe08865-1867-475c-9be7-21ac549e848a" }
     },
     "owner": "thuku0249s-team",

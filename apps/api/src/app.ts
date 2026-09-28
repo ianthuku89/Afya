@@ -26,6 +26,13 @@ import { logger } from './lib/logger.js';
 export function createApp(): Application {
     const app = express();
 
+    // ── TRUST PROXY ────────────────────────────────────────────────────────
+    // Render (and most PaaS providers) sit behind a reverse proxy, so Express
+    // needs this to correctly read X-Forwarded-For for rate limiting, IP
+    // logging, and secure cookies. Without it, express-rate-limit throws
+    // ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on every request.
+    app.set('trust proxy', 1);
+
     // ── SECURITY HEADERS (OWASP A05: Security Misconfiguration) ──────────────
     // Security rationale: helmet sets 11+ security headers preventing XSS,
     // clickjacking, MIME sniffing, and information disclosure.
@@ -131,7 +138,7 @@ export function createApp(): Application {
     app.use('/api/v1/afyascore', afyaScoreRouter);
     app.use('/api/v1/coverage', coverageRouter);
     app.use('/api/v1/loyalty', loyaltyRouter);
-    
+
     // USSD must bypass standard JWT auth since telephony gateways fire requests externally
     app.use('/api/v1/ussd', ussdRouter);
     // Licensing API for partners (DHA / Safaricom)
@@ -156,7 +163,16 @@ export function createApp(): Application {
     // to clients (OWASP A09: Security Logging and Monitoring Failures).
     app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
         const requestId = req.headers['x-request-id'] as string;
-        logger.error({ err, requestId, path: req.path });
+        // Error objects have non-enumerable message/stack properties, so
+        // logging `{ err }` directly serializes to `{}`. Pull the fields
+        // out explicitly so the real cause actually shows up in logs.
+        logger.error({
+            message: err.message,
+            stack: err.stack,
+            name: err.name,
+            requestId,
+            path: req.path,
+        });
         res.status(500).json({
             success: false,
             error: { code: 'INTERNAL_ERROR', message: 'An internal error occurred' },
@@ -166,4 +182,3 @@ export function createApp(): Application {
 
     return app;
 }
-
