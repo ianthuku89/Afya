@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { client } from '../../api/client';
-
+import { startStkPush, waitForPayment } from '../../api/mpesa';
 interface MerchantPaymentModalProps {
   visible: boolean;
   onClose: () => void;
@@ -23,101 +22,88 @@ export default function MerchantPaymentModal({
   onSuccess,
 }: MerchantPaymentModalProps) {
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<'preview' | 'processing' | 'prompt2_ready' | 'completed'>('preview');
+  const [step, setStep] = useState<'preview' | 'processing' | 'completed'>('preview');
   const [statusMessage, setStatusMessage] = useState('');
 
   const isQualifying = merchantAmount > 100;
   const shifAmount = 30;
   const totalAmount = isQualifying ? merchantAmount + shifAmount : merchantAmount;
 
+  const finish = (shifDeducted: boolean) => {
+    setStep('completed');
+    setLoading(false);
+    onSuccess?.({ merchantAmount, shifDeducted });
+  };
+
+  const fail = (message: string) => {
+    setLoading(false);
+    setStep('preview');
+    Alert.alert('Payment Failed', message);
+  };
+
+  // CHANGED: each prompt is confirmed by the Daraja callback before moving on.
   const handlePayWithShifDeduct = async () => {
     setLoading(true);
     setStep('processing');
-    setStatusMessage('Sending Prompt 1: KES ' + merchantAmount + ' to ' + merchantName + '...');
 
     try {
-      // ── STEP 1: Push Merchant STK Push ───────────────────────────────────
-      const merchantRes = await client.post('/payment/stkpush', {
+      // ── Prompt 1: merchant amount ──
+      setStatusMessage(`Prompt 1 sent! Enter your M-PESA PIN for KES ${merchantAmount}.`);
+      const id1 = await startStkPush({
         amount: merchantAmount,
-        currency: 'KES',
-        description: `Payment to ${merchantName}`,
+        description: 'Merchant',
+        purpose: 'MERCHANT',
       });
+      const r1 = await waitForPayment(id1);
+      if (r1.status !== 'SUCCESS') return fail(r1.message || 'Merchant payment was not completed.');
 
-      const txRef = merchantRes.data?.data?.checkoutRequestId || `MERCH-${Date.now()}`;
+      if (!isQualifying) {
+        setStatusMessage('Payment confirmed.');
+        return finish(false);
+      }
 
-      // Simulate STK #1 PIN entry confirmation
-      setStatusMessage(`Prompt 1 sent! Enter M-PESA PIN for KES ${merchantAmount} on your phone.`);
-
-      setTimeout(async () => {
-        if (!isQualifying) {
-          setStep('completed');
-          setLoading(false);
-          onSuccess?.({ merchantAmount, shifDeducted: false });
-          return;
+      // ── Prompt 2: KES 30 SHIF (only after prompt 1 is confirmed) ──
+      setStatusMessage(`Prompt 1 confirmed! Prompt 2 sent: enter PIN for KES ${shifAmount} SHIF (A/C ${nationalId}).`);
+      try {
+        const id2 = await startStkPush({
+          amount: shifAmount,
+          accountReference: nationalId,
+          description: 'SHIF',
+          purpose: 'SHIF',
+        });
+        const r2 = await waitForPayment(id2);
+        if (r2.status === 'SUCCESS') {
+          setStatusMessage('Both payments confirmed.');
+          return finish(true);
         }
-
-        // ── STEP 2: Trigger Real-time STK Push #2 for KES 30 to Paybill 200222 ──
-        setStatusMessage(`Prompt 1 confirmed! Sending Prompt 2: KES 30 to SHA (Paybill 200222)...`);
-
-        try {
-          const shifRes = await client.post('/auto-deduct/merchant-trigger', {
-            txAmount: merchantAmount,
-            txRef: txRef,
-          });
-
-          if (shifRes.data?.alreadyDeductedToday) {
-            setStatusMessage('Merchant paid! Daily KES 30 SHIF deduction was already satisfied earlier today.');
-            setStep('completed');
-            setLoading(false);
-            onSuccess?.({ merchantAmount, shifDeducted: false });
-            return;
-          }
-
-          setStatusMessage(`Prompt 2 sent! Enter M-PESA PIN for KES 30 SHIF contribution (Paybill 200222, Account: ${nationalId}).`);
-
-          setTimeout(() => {
-            setStep('completed');
-            setLoading(false);
-            onSuccess?.({ merchantAmount, shifDeducted: true });
-          }, 3500);
-
-        } catch (shifErr: any) {
-          console.warn('SHIF deduction trigger error:', shifErr?.response?.data || shifErr?.message);
-          setStatusMessage('Merchant payment completed. Daily SHIF deduction will be retried automatically.');
-          setStep('completed');
-          setLoading(false);
-          onSuccess?.({ merchantAmount, shifDeducted: false });
-        }
-      }, 3500);
-
+        setStatusMessage('Merchant paid. SHIF contribution was not completed; you can retry from the Contribute screen.');
+        return finish(false);
+      } catch {
+        setStatusMessage('Merchant paid. SHIF contribution could not be started; you can retry from the Contribute screen.');
+        return finish(false);
+      }
     } catch (e: any) {
-      setLoading(false);
-      setStep('preview');
-      Alert.alert('Payment Failed', e.response?.data?.error || e.message || 'Could not initiate M-PESA payment.');
+      fail(e.response?.data?.error || e.message || 'Could not initiate M-PESA payment.');
     }
   };
 
   const handlePayMerchantOnly = async () => {
     setLoading(true);
     setStep('processing');
-    setStatusMessage(`Sending Prompt: KES ${merchantAmount} to ${merchantName}...`);
+    setStatusMessage(`Prompt sent! Enter your M-PESA PIN for KES ${merchantAmount}.`);
 
     try {
-      await client.post('/payment/stkpush', {
+      const id = await startStkPush({
         amount: merchantAmount,
-        currency: 'KES',
-        description: `Payment to ${merchantName}`,
+        description: 'Merchant',
+        purpose: 'MERCHANT',
       });
-
-      setTimeout(() => {
-        setStep('completed');
-        setLoading(false);
-        onSuccess?.({ merchantAmount, shifDeducted: false });
-      }, 3000);
+      const r = await waitForPayment(id);
+      if (r.status !== 'SUCCESS') return fail(r.message || 'Payment was not completed.');
+      setStatusMessage('Payment confirmed.');
+      finish(false);
     } catch (e: any) {
-      setLoading(false);
-      setStep('preview');
-      Alert.alert('Payment Failed', e.response?.data?.error || e.message || 'Could not initiate payment.');
+      fail(e.response?.data?.error || e.message || 'Could not initiate payment.');
     }
   };
 
@@ -130,7 +116,7 @@ export default function MerchantPaymentModal({
     <Modal visible={visible} transparent animationType="slide">
       <View className="flex-1 bg-black/80 justify-end">
         <View className="bg-slate-900 border-t border-slate-700 rounded-t-3xl p-6">
-          
+
           {/* Header */}
           <View className="flex-row justify-between items-center mb-5">
             <View className="flex-row items-center gap-2">

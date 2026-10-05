@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, SafeAreaView, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { client } from '../../api/client';
+import { startStkPush, waitForPayment } from '../../api/mpesa'; // NEW
 import { useNavigation } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import MerchantPaymentModal from './MerchantPaymentModal';
@@ -14,44 +15,58 @@ const Slider = require('@react-native-community/slider').default as React.Compon
 export default function ContributeScreen() {
   const [amount, setAmount] = useState(30);
   const [loading, setLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState(''); // NEW
   const [merchantModalVisible, setMerchantModalVisible] = useState(false);
   const [successData, setSuccessData] = useState<{ tx: string; newStreak: number; newTier: string } | null>(null);
   const navigation = useNavigation<any>();
 
+  // CHANGED: real Daraja flow. Success is only shown after the callback confirms payment.
   const handleMpesaPush = async () => {
-    // If user is testing/triggering a merchant transaction > 100, show the C2B dual-prompt modal
     if (amount > 100) {
       setMerchantModalVisible(true);
       return;
     }
 
     setLoading(true);
+    setStatusMessage('Sending M-PESA prompt...');
     try {
-      const res = await client.post('/payment/stkpush', {
-        amount: amount,
-        currency: 'KES',
-        description: 'AfyaToken SHIF Contribution'
+      // The server fills in the user's phone and National ID (account number) from their session
+      const checkoutRequestId = await startStkPush({
+        amount,
+        description: 'SHIF',
+        purpose: 'SHIF',
       });
 
-      const checkoutRequestId = res.data?.data?.checkoutRequestId || `CONTRIB-${Date.now()}`;
-      
-      Alert.alert("STK Push Sent", `Please enter your M-PESA PIN for KES ${amount} (Paybill 200222).`);
-      setTimeout(() => {
-         setLoading(false);
-         setSuccessData({
-           tx: checkoutRequestId,
-           newStreak: 1,
-           newTier: 'Bronze',
-         });
-      }, 3000);
-      
+      setStatusMessage(`Enter your M-PESA PIN for KES ${amount} on your phone...`);
+      const result = await waitForPayment(checkoutRequestId);
+
+      if (result.status === 'SUCCESS') {
+        // Streak should come from your backend (incremented in the callback).
+        // Falls back to defaults until you add a GET /streak endpoint.
+        let newStreak = 1;
+        let newTier = 'Bronze';
+        try {
+          const { data } = await client.get('/streak');
+          newStreak = data.streak ?? newStreak;
+          newTier = data.tier ?? newTier;
+        } catch {}
+        setSuccessData({ tx: result.receipt || checkoutRequestId, newStreak, newTier });
+      } else {
+        Alert.alert('Payment not completed', result.message || 'Please try again.');
+      }
     } catch (e: any) {
+      Alert.alert(
+        'Payment Failed',
+        e.response?.data?.error || e.response?.data?.message || e.message || 'Failed to initiate M-PESA push'
+      );
+    } finally {
       setLoading(false);
-      Alert.alert('Payment Failed', e.response?.data?.message || e.response?.data?.error || 'Failed to initiate M-PESA push');
+      setStatusMessage('');
     }
   };
 
   const handleMerchantSuccess = (details: { merchantAmount: number; shifDeducted: boolean }) => {
+    setMerchantModalVisible(false);
     setSuccessData({
       tx: `C2B-${Date.now()}`,
       newStreak: 1,
@@ -70,7 +85,7 @@ export default function ContributeScreen() {
           KES {amount} routed to your Social Health Authority (SHA) account via Paybill 200222
         </Text>
         <Text className="text-teal-400 font-mono text-xs mb-6">TX: {successData.tx}</Text>
-        
+
         {/* Streak Update Card */}
         <View className="bg-white/5 border border-white/10 rounded-3xl p-5 w-full mb-6">
           <View className="flex-row justify-between items-center mb-3">
@@ -87,15 +102,15 @@ export default function ContributeScreen() {
             </View>
           </View>
         </View>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           className="w-full bg-teal-500 rounded-2xl py-4 items-center mb-3"
           onPress={() => { setSuccessData(null); navigation.navigate('Home' as never); }}
         >
           <Text className="text-white font-bold text-base">Return Home</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           className="w-full bg-transparent border border-white/20 rounded-2xl py-3 items-center"
           onPress={() => { setSuccessData(null); navigation.navigate('TierBenefits' as never); }}
         >
@@ -148,9 +163,10 @@ export default function ContributeScreen() {
         {/* Quick Amount Pills */}
         <View className="flex-row gap-2 mb-6">
           {[30, 50, 100, 150, 300].map(v => (
-            <TouchableOpacity 
+            <TouchableOpacity
               key={v}
               onPress={() => setAmount(v)}
+              disabled={loading}
               className={`flex-1 py-3 rounded-xl items-center border ${amount === v ? 'bg-teal-500 border-teal-400' : 'bg-transparent border-slate-700'}`}
             >
               <Text className={`font-bold ${amount === v ? 'text-white' : 'text-slate-400'}`}>
@@ -187,8 +203,13 @@ export default function ContributeScreen() {
           </View>
         )}
 
-        <TouchableOpacity 
-          className="bg-teal-500 rounded-2xl py-4 items-center flex-row justify-center gap-2 shadow-lg"
+        {/* NEW: live status while waiting for the PIN */}
+        {loading && !!statusMessage && (
+          <Text className="text-teal-300 text-center text-sm mb-4">{statusMessage}</Text>
+        )}
+
+        <TouchableOpacity
+          className={`bg-teal-500 rounded-2xl py-4 items-center flex-row justify-center gap-2 shadow-lg ${loading ? 'opacity-60' : ''}`}
           onPress={handleMpesaPush}
           disabled={loading}
         >

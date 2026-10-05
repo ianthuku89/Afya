@@ -11,16 +11,23 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
-    "runtimeVersion": { "policy": "appVersion" },
-    "experiments": { "tsconfigPaths": true },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "experiments": {
+      "tsconfigPaths": true
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.seaboard.healthtoken",
       "buildNumber": "1",
       "infoPlist": {
         "NSFaceIDUsageDescription": "Allow AfyaToken to securely lock your wallet.",
-        "NSLocationWhenInUseUsageDescription": "AfyaToken requires your location to map nearby SHA-accredited facilities."
+        "NSLocationWhenInUseUsageDescription": "AfyaToken requires your location to map nearby SHA-accredited facilities.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -32,15 +39,31 @@
       "versionCode": 1
     },
     "plugins": [
-      ["expo-location", { "locationAlwaysAndWhenInUsePermission": "Allow AfyaToken to use your location for finding hospitals." }],
-      ["expo-local-authentication", { "faceIDPermission": "Allow AfyaToken to securely lock your wallet." }]
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow AfyaToken to use your location for finding hospitals."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow AfyaToken to securely lock your wallet."
+        }
+      ]
     ],
-    "web": { "favicon": "./assets/favicon.png" },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
     "extra": {
       "apiUrl": "https://afya-cvq5.onrender.com/api/v1",
-      "eas": { "projectId": "3fe08865-1867-475c-9be7-21ac549e848a" }
+      "eas": {
+        "projectId": "3fe08865-1867-475c-9be7-21ac549e848a"
+      }
     },
     "owner": "thuku0249s-team",
-    "updates": { "url": "https://u.expo.dev/3fe08865-1867-475c-9be7-21ac549e848a" }
+    "updates": {
+      "url": "https://u.expo.dev/3fe08865-1867-475c-9be7-21ac549e848a"
+    }
   }
 }

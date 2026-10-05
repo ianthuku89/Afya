@@ -39,8 +39,15 @@ client.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Auth endpoints (login/register/refresh) legitimately return 401/403 for
+    // bad credentials or an invalid refresh token — that is not an expired
+    // access token, so never run the refresh-retry flow for these calls.
+    const isAuthEndpoint = originalRequest?.url?.includes('/auth/login')
+      || originalRequest?.url?.includes('/auth/register')
+      || originalRequest?.url?.includes('/auth/refresh');
+
     // If 401 Unauthorized and we haven't retried yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true;
 
       try {
