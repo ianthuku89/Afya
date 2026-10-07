@@ -34,8 +34,6 @@ export function createApp(): Application {
     app.set('trust proxy', 1);
 
     // ── SECURITY HEADERS (OWASP A05: Security Misconfiguration) ──────────────
-    // Security rationale: helmet sets 11+ security headers preventing XSS,
-    // clickjacking, MIME sniffing, and information disclosure.
     app.use(
         helmet({
             contentSecurityPolicy: {
@@ -49,7 +47,6 @@ export function createApp(): Application {
                     objectSrc: ["'none'"],
                 },
             },
-            // HSTS: 2-year max-age as specified (OWASP A02: Cryptographic Failures)
             hsts: {
                 maxAge: 63_072_000, // 2 years in seconds
                 includeSubDomains: true,
@@ -60,6 +57,7 @@ export function createApp(): Application {
     );
 
     // ── CORS (OWASP A01: Broken Access Control) ───────────────────────────────
+    // Safaricom callbacks are server-to-server (no Origin header), so they pass the !origin check.
     const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
         .split(',')
         .map(o => o.trim());
@@ -82,13 +80,28 @@ export function createApp(): Application {
     );
 
     // ── RATE LIMITING (OWASP A04: Insecure Design) ───────────────────────────
-    // Security rationale: layered rate limits prevent brute-force and DoS.
+    // CHANGED: Safaricom callbacks and the app's payment-status polling are excluded from the
+    // general 100 req/min/IP limiter. Many phones share one carrier IP, and a 3s poll per user
+    // would otherwise start returning 429s. Status polling gets its own, higher limiter below.
+    const PAYMENT_EXEMPT_PREFIXES = ['/payment/callback', '/payment/shif-callback', '/payment/status'];
+
     const publicLimiter = rateLimit({
         windowMs: 60_000,       // 1 minute
-        max: 100,          // 100 req/min per IP (public endpoints)
+        max: 100,               // 100 req/min per IP (public endpoints)
         standardHeaders: true,
         legacyHeaders: false,
+        skip: (req) => PAYMENT_EXEMPT_PREFIXES.some((p) => req.path.startsWith(p)),
         message: { success: false, error: { code: 'RATE_LIMIT', message: 'Too many requests' } },
+    });
+
+    // NEW: payment polling (every ~3s per active payment); keyed by the user's token, falling back to IP
+    const paymentStatusLimiter = rateLimit({
+        windowMs: 60_000,
+        max: 120,
+        keyGenerator: (req) => (req.headers.authorization as string) || req.ip || 'unknown',
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: { success: false, error: { code: 'RATE_LIMIT', message: 'Too many status checks' } },
     });
 
     const facilityLimiter = rateLimit({
@@ -101,16 +114,17 @@ export function createApp(): Application {
 
     const authLimiter = rateLimit({
         windowMs: 900_000,      // 15 minutes
-        max: 10,           // Max 10 login attempts per 15 min: brute-force protection
+        max: 10,                // Max 10 login attempts per 15 min: brute-force protection
         message: { success: false, error: { code: 'AUTH_RATE_LIMIT', message: 'Too many login attempts' } },
     });
 
     app.use('/api/v1/auth', authLimiter);
     app.use('/api/v1/fhir', facilityLimiter);
+    app.use('/api/v1/payment/status', paymentStatusLimiter);
     app.use('/api/v1', publicLimiter);
 
     // ── BODY PARSING ─────────────────────────────────────────────────────────
-    // 10kb limit prevents large payload DoS attacks
+    // 10kb limit prevents large payload DoS attacks (Daraja callbacks are well under this)
     app.use(express.json({ limit: '10kb' }));
     app.use(express.urlencoded({ extended: false, limit: '10kb' }));
     app.use(compression());
@@ -159,13 +173,8 @@ export function createApp(): Application {
     });
 
     // ── Global Error Handler ─────────────────────────────────────────────────
-    // Security rationale: Generic error messages prevent information leakage
-    // to clients (OWASP A09: Security Logging and Monitoring Failures).
     app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
         const requestId = req.headers['x-request-id'] as string;
-        // Error objects have non-enumerable message/stack properties, so
-        // logging `{ err }` directly serializes to `{}`. Pull the fields
-        // out explicitly so the real cause actually shows up in logs.
         logger.error({
             message: err.message,
             stack: err.stack,

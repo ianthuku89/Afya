@@ -134,6 +134,8 @@ enum CoverType {
 }
 
 // ─── TRANSACTION ──────────────────────────────────────────────────────────────
+// M-PESA flow: PENDING -> PROCESSING (atomic claim in finalizePayment)
+//              -> CONFIRMED | FAILED | FLAGGED (amount mismatch, needs review)
 model Transaction {
   id          String             @id @default(uuid())
   txHash      String             @unique
@@ -150,15 +152,26 @@ model Transaction {
 
   wallet Wallet? @relation(fields: [walletId], references: [id])
 
+  // Daraja / M-PESA fields
+  checkoutRequestId String? @unique
+  merchantRequestId String? // Daraja MerchantRequestID (returned by STK push)
+  amountKES         Int? // Amount we asked Daraja to charge; callback amount is verified against this
+  mpesaReceipt      String?
+  resultCode        Int?
+  resultDesc        String?
+
   @@index([txHash])
   @@index([walletId])
   @@index([status])
+  @@index([status, createdAt]) // for finding stuck PENDING / PROCESSING rows
   @@index([source])
+  @@index([mpesaReceipt])
   @@map("transactions")
 }
 
 enum TxStatus {
   PENDING
+  PROCESSING // claimed by a callback / poll; prevents double-minting
   CONFIRMED
   FAILED
   FLAGGED
@@ -221,9 +234,9 @@ model Claim {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
-  patient  User     @relation("PatientClaims", fields: [patientId], references: [id])
-  facility Facility @relation("FacilityClaims", fields: [facilityId], references: [id])
-  reviewer User?    @relation("ReviewedClaims", fields: [reviewerId], references: [id])
+  patient  User           @relation("PatientClaims", fields: [patientId], references: [id])
+  facility Facility       @relation("FacilityClaims", fields: [facilityId], references: [id])
+  reviewer User?          @relation("ReviewedClaims", fields: [reviewerId], references: [id])
   revenue  RevenueLedger?
 
   @@index([patientId])
@@ -434,35 +447,34 @@ enum InternalRole {
 
 // Track 1.75% fee per successful AfyaToken hospital claim
 model RevenueLedger {
-  id              String        @id @default(uuid())
-  claimId         String        @unique
-  claimAmountKES  Decimal       @db.Decimal(14, 2)
-  seaboardFeeKES  Decimal       @db.Decimal(14, 2) // 1.75%
-  status          RevenueStatus @default(UNBILLED)
-  invoiceId       String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id             String        @id @default(uuid())
+  claimId        String        @unique
+  claimAmountKES Decimal       @db.Decimal(14, 2)
+  seaboardFeeKES Decimal       @db.Decimal(14, 2) // 1.75%
+  status         RevenueStatus @default(UNBILLED)
+  invoiceId      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  claim           Claim         @relation(fields: [claimId], references: [id])
-  invoice         Invoice?      @relation(fields: [invoiceId], references: [id])
+  claim   Claim    @relation(fields: [claimId], references: [id])
+  invoice Invoice? @relation(fields: [invoiceId], references: [id])
 
   @@index([invoiceId])
   @@index([status])
   @@map("revenue_ledger")
-
 }
 
 // Deduction Revenue model to track company fees from auto-deductions
 model DeductionRevenue {
-  id             String           @id @default(uuid())
-  userId         String
-  deductionLogId String?
-  deductedAmount Decimal          @db.Decimal(14, 2)
-  companyFeeKES  Decimal          @db.Decimal(14, 2) // 1.75%
-  corporateAccount String
-  routedToCorporate Boolean        @default(false)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @default(now())
+  id                String   @id @default(uuid())
+  userId            String
+  deductionLogId    String?
+  deductedAmount    Decimal  @db.Decimal(14, 2)
+  companyFeeKES     Decimal  @db.Decimal(14, 2) // 1.75%
+  corporateAccount  String
+  routedToCorporate Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
@@ -474,7 +486,7 @@ model DeductionRevenue {
 model License {
   id           String   @id @default(uuid())
   partnerName  String
-  partnerType  String   // e.g., DHA, SAFARICOM
+  partnerType  String // e.g., DHA, SAFARICOM
   licenseKey   String   @unique
   active       Boolean  @default(true)
   revenueModel String   @default("STANDARD")
@@ -487,18 +499,18 @@ model License {
 model Invoice {
   id               String        @id @default(uuid())
   invoiceNumber    String        @unique // e.g. INV-2026-05
-  billingPeriod    String        // e.g. "May 2026"
+  billingPeriod    String // e.g. "May 2026"
   totalClaims      Int
   totalClaimAmount Decimal       @db.Decimal(14, 2)
   totalFeeKES      Decimal       @db.Decimal(14, 2)
   status           InvoiceStatus @default(DRAFT)
   erpSyncStatus    String        @default("PENDING") // PENDING, SYNCED, FAILED
-  erpReferenceId   String?       // QuickBooks Invoice ID
+  erpReferenceId   String? // QuickBooks Invoice ID
   erpSyncedAt      DateTime?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  ledgerItems      RevenueLedger[]
+  ledgerItems RevenueLedger[]
 
   @@index([status])
   @@index([erpSyncStatus])

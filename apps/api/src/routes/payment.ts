@@ -4,17 +4,28 @@ import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
 
-// /api/v1/payment/stkpush  -> Initiates direct contribution STK push
+// ── AUTHENTICATED (mobile app) ────────────────────────────────────────────────
+
+// POST /api/v1/payment/stkpush -> direct contribution STK push (mints AfyaTokens on success)
 router.post('/stkpush', authenticate, paymentController.initiateStkPush);
 
-// /api/v1/payment/shif-stkpush -> Initiates real-time STK Push #2 for KES 30 SHIF daily deduction (Paybill 200222)
+// POST /api/v1/payment/shif-stkpush -> KES 30 SHIF daily deduction STK push (no minting)
 router.post('/shif-stkpush', authenticate, paymentController.initiateSHIFStkPush);
 
-// /api/v1/payment/callback -> Asynchronous webhook from Safaricom Daraja for direct contributions
-router.post('/callback', paymentController.darajaCallback);
+// GET /api/v1/payment/status/:checkoutRequestId -> polled by the app.
+// Falls back to Daraja STK Query if the callback is late or lost.
+router.get('/status/:checkoutRequestId', authenticate, paymentController.getPaymentStatus);
 
-// /api/v1/payment/shif-callback -> Webhook from Safaricom Daraja for Paybill 200222 (SHA SHIF) payments
-router.post('/shif-callback', paymentController.darajaSHIFCallback);
+// ── SAFARICOM WEBHOOKS (NO JWT: Safaricom cannot send one) ────────────────────
+// The :secret path segment is the ONLY thing authenticating these calls.
+// It must equal DARAJA_CALLBACK_SECRET; the controller checks it in constant time.
+// The URLs given to Daraja are built in the controller (callbackUrl / shifCallbackUrl)
+// as `${API_BASE_URL}/api/v1/payment/callback/${secret}`, so these paths must match.
+
+// POST /api/v1/payment/callback/:secret -> direct contribution result
+router.post('/callback/:secret', paymentController.darajaCallback);
+
+// POST /api/v1/payment/shif-callback/:secret -> KES 30 SHIF result
+router.post('/shif-callback/:secret', paymentController.darajaSHIFCallback);
 
 export const paymentRouter = router;
-
