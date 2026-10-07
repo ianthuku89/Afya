@@ -21,8 +21,9 @@
     "vercel-build": "turbo run build --filter=./apps/web... --filter=./apps/internal... --filter=./apps/seaboard... --filter=./apps/api..."
   },
   "devDependencies": {
-    "turbo": "^2.1.0",
+    "@types/node": "^26.6.4",
     "rimraf": "^5.0.5",
+    "turbo": "^2.1.0",
     "typescript": "^5.4.0"
   },
   "engines": {
