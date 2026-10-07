@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { startStkPush, waitForPayment } from '../../api/mpesa';
+import { startStkPush, startShifPush, waitForPayment, errorMessage } from '../../api/mpesa';
+
 interface MerchantPaymentModalProps {
   visible: boolean;
   onClose: () => void;
@@ -49,11 +50,7 @@ export default function MerchantPaymentModal({
     try {
       // ── Prompt 1: merchant amount ──
       setStatusMessage(`Prompt 1 sent! Enter your M-PESA PIN for KES ${merchantAmount}.`);
-      const id1 = await startStkPush({
-        amount: merchantAmount,
-        description: 'Merchant',
-        purpose: 'MERCHANT',
-      });
+      const id1 = await startStkPush({ amount: merchantAmount, description: 'Merchant' });
       const r1 = await waitForPayment(id1);
       if (r1.status !== 'SUCCESS') return fail(r1.message || 'Merchant payment was not completed.');
 
@@ -65,12 +62,7 @@ export default function MerchantPaymentModal({
       // ── Prompt 2: KES 30 SHIF (only after prompt 1 is confirmed) ──
       setStatusMessage(`Prompt 1 confirmed! Prompt 2 sent: enter PIN for KES ${shifAmount} SHIF (A/C ${nationalId}).`);
       try {
-        const id2 = await startStkPush({
-          amount: shifAmount,
-          accountReference: nationalId,
-          description: 'SHIF',
-          purpose: 'SHIF',
-        });
+        const id2 = await startShifPush(id1); // id1 = triggerTxRef; backend sends KES 30 SHIF
         const r2 = await waitForPayment(id2);
         if (r2.status === 'SUCCESS') {
           setStatusMessage('Both payments confirmed.');
@@ -83,7 +75,7 @@ export default function MerchantPaymentModal({
         return finish(false);
       }
     } catch (e: any) {
-      fail(e.response?.data?.error || e.message || 'Could not initiate M-PESA payment.');
+      fail(errorMessage(e, 'Could not initiate M-PESA payment.'));
     }
   };
 
@@ -93,17 +85,13 @@ export default function MerchantPaymentModal({
     setStatusMessage(`Prompt sent! Enter your M-PESA PIN for KES ${merchantAmount}.`);
 
     try {
-      const id = await startStkPush({
-        amount: merchantAmount,
-        description: 'Merchant',
-        purpose: 'MERCHANT',
-      });
+      const id = await startStkPush({ amount: merchantAmount, description: 'Merchant' });
       const r = await waitForPayment(id);
       if (r.status !== 'SUCCESS') return fail(r.message || 'Payment was not completed.');
       setStatusMessage('Payment confirmed.');
       finish(false);
     } catch (e: any) {
-      fail(e.response?.data?.error || e.message || 'Could not initiate payment.');
+      fail(errorMessage(e, 'Could not initiate payment.'));
     }
   };
 

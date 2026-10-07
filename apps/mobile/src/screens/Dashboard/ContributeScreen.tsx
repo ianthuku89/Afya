@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, SafeAreaView, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
-import { client } from '../../api/client';
-import { startStkPush, waitForPayment } from '../../api/mpesa'; // NEW
+import { startStkPush, waitForPayment, errorMessage } from '../../api/mpesa';
 import { useNavigation } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import MerchantPaymentModal from './MerchantPaymentModal';
@@ -31,34 +30,23 @@ export default function ContributeScreen() {
     setStatusMessage('Sending M-PESA prompt...');
     try {
       // The server fills in the user's phone and National ID (account number) from their session
-      const checkoutRequestId = await startStkPush({
-        amount,
-        description: 'SHIF',
-        purpose: 'SHIF',
-      });
+      const checkoutRequestId = await startStkPush({ amount, description: 'SHIF' });
 
       setStatusMessage(`Enter your M-PESA PIN for KES ${amount} on your phone...`);
       const result = await waitForPayment(checkoutRequestId);
 
       if (result.status === 'SUCCESS') {
-        // Streak should come from your backend (incremented in the callback).
-        // Falls back to defaults until you add a GET /streak endpoint.
-        let newStreak = 1;
-        let newTier = 'Bronze';
-        try {
-          const { data } = await client.get('/streak');
-          newStreak = data.streak ?? newStreak;
-          newTier = data.tier ?? newTier;
-        } catch {}
-        setSuccessData({ tx: result.receipt || checkoutRequestId, newStreak, newTier });
+        // Streak/tier are updated server-side in the callback and returned by the status endpoint
+        setSuccessData({
+          tx: result.receipt || checkoutRequestId,
+          newStreak: result.streak ?? 1,
+          newTier: result.tier ?? 'Bronze',
+        });
       } else {
         Alert.alert('Payment not completed', result.message || 'Please try again.');
       }
     } catch (e: any) {
-      Alert.alert(
-        'Payment Failed',
-        e.response?.data?.error || e.response?.data?.message || e.message || 'Failed to initiate M-PESA push'
-      );
+      Alert.alert('Payment Failed', errorMessage(e, 'Failed to initiate M-PESA push'));
     } finally {
       setLoading(false);
       setStatusMessage('');
