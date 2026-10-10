@@ -107,7 +107,12 @@ async function getDarajaToken(): Promise<string> {
     return cachedToken.value;
 }
 
-async function darajaPost(path: string, body: object): Promise<any> {
+/**
+ * POST to Daraja. Daraja (especially the sandbox) sometimes rejects a valid token with
+ * a 404 / "Invalid Access Token", so on that response we drop the cached token and
+ * retry once with a fresh one.
+ */
+async function darajaPost(path: string, body: object, retried = false): Promise<any> {
     const token = await getDarajaToken();
     const res = await fetch(`${darajaBaseUrl()}${path}`, {
         method: 'POST',
@@ -115,8 +120,17 @@ async function darajaPost(path: string, body: object): Promise<any> {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(20_000),
     });
-    if (res.status === 401) cachedToken = null; // force a fresh token next time
-    return res.json().catch(() => ({}));
+    const data: any = await res.json().catch(() => ({}));
+
+    const badToken =
+        res.status === 401 ||
+        data?.errorCode === '404.001.03' ||
+        /invalid access token/i.test(data?.errorMessage || '');
+    if (badToken) {
+        cachedToken = null; // force a fresh token
+        if (!retried) return darajaPost(path, body, true);
+    }
+    return data;
 }
 
 /** Single place that talks to Daraja's STK endpoint (always OUR shortcode). */
@@ -231,6 +245,12 @@ type Outcome = { resultCode: number; resultDesc?: string; receipt?: string; paid
  * claim, so duplicate callbacks or a callback racing a poll can never double-mint.
  */
 export async function finalizePayment(checkoutRequestId: string, outcome: Outcome) {
+    // 4999 = "still under processing" (STK Query). Not final: leave PENDING and wait for the callback.
+    if (Number(outcome.resultCode) === 4999) {
+        logger.info(`[finalize] ${checkoutRequestId} still processing, leaving PENDING`);
+        return 'still-processing' as const;
+    }
+
     const tx = await prisma.transaction.findUnique({
         where: { checkoutRequestId },
         include: { wallet: { include: { user: true } } },
@@ -240,8 +260,12 @@ export async function finalizePayment(checkoutRequestId: string, outcome: Outcom
         return 'unknown' as const;
     }
 
+    // Claim the row. A row wrongly failed earlier with 4999 may also be reclaimed by a real result.
     const claim = await prisma.transaction.updateMany({
-        where: { id: tx.id, status: 'PENDING' },
+        where: {
+            id: tx.id,
+            OR: [{ status: 'PENDING' }, { status: 'FAILED', resultCode: 4999 }],
+        },
         data: { status: 'PROCESSING' },
     });
     if (claim.count === 0) return 'already-handled' as const;
