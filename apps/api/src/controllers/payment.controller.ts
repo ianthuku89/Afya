@@ -6,7 +6,6 @@ import { z } from 'zod';
 import { decrypt } from '../lib/crypto.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
-import { blockchainService } from '../services/blockchain.service.js';
 import { creditShifAccount } from '../services/shifService.js';
 import { getTierFromStreak } from '../routes/afyascore.js';
 
@@ -186,10 +185,11 @@ const shifCallbackUrl = () => `${callbackBase()}/shif-callback/${process.env.DAR
 
 // ── PENDING TRANSACTION RECORD ────────────────────────────────────────────────
 /**
- * txHash gets a local placeholder now and is replaced by the on-chain mint hash
- * on success; Daraja's CheckoutRequestID lives in its own column so callbacks
- * and status polling can always find the row. amountKES is what we asked Daraja
- * to charge and is what the callback amount is verified against.
+ * txHash gets a local PENDING_ placeholder now and is replaced by a local ledger
+ * reference (LEDGER_<id>) on success; there is no on-chain step. Daraja's
+ * CheckoutRequestID lives in its own column so callbacks and status polling can
+ * always find the row. amountKES is what we asked Daraja to charge and is what
+ * the callback amount is verified against.
  */
 async function createPendingDarajaTransaction(
     walletId: string,
@@ -242,7 +242,7 @@ type Outcome = { resultCode: number; resultDesc?: string; receipt?: string; paid
 /**
  * Called by the Daraja callbacks, by the status-poll fallback (STK Query) and by
  * the dev simulation. Whoever calls first wins an atomic PENDING -> PROCESSING
- * claim, so duplicate callbacks or a callback racing a poll can never double-mint.
+ * claim, so duplicate callbacks or a callback racing a poll can never double-credit.
  */
 export async function finalizePayment(checkoutRequestId: string, outcome: Outcome) {
     // 4999 = "still under processing" (STK Query). Not final: leave PENDING and wait for the callback.
@@ -305,11 +305,11 @@ export async function finalizePayment(checkoutRequestId: string, outcome: Outcom
         return 'amount-mismatch' as const;
     }
 
-    let txHash = `NO_MINT_AUTO_DEDUCT_${Date.now()}`;
+    // Record the confirmed payment. No on-chain step: the DB is the ledger.
+    // txHash is kept (likely NOT NULL / unique in the schema) but now holds a
+    // local ledger reference instead of a blockchain hash.
+    const ledgerRef = `LEDGER_${tx.id}`;
     try {
-        if (!isAutoDeduct) {
-            txHash = await blockchainService.mintTokensToUser(tx.wallet.blockchainAddress, amountKES);
-        }
         await prisma.$transaction([
             ...(!isAutoDeduct
                 ? [prisma.wallet.update({ where: { id: tx.wallet.id }, data: { lockedAfya: { increment: amountKES } } })]
@@ -319,7 +319,7 @@ export async function finalizePayment(checkoutRequestId: string, outcome: Outcom
                 data: {
                     status: 'CONFIRMED',
                     amountAfya: isAutoDeduct ? 0 : amountKES,
-                    txHash,
+                    txHash: ledgerRef,
                     mpesaReceipt: outcome.receipt,
                     resultCode: 0,
                     resultDesc: outcome.resultDesc,
@@ -327,8 +327,8 @@ export async function finalizePayment(checkoutRequestId: string, outcome: Outcom
             }),
         ]);
     } catch (err) {
-        // Reopen so the next status poll can retry.
-        // CAUTION: if the mint succeeded but the DB write failed, check the chain before retrying.
+        // Safe to reopen: the wallet increment and CONFIRMED status are one atomic
+        // DB transaction, so a retry can't double-credit.
         await prisma.transaction.update({ where: { id: tx.id }, data: { status: 'PENDING' } });
         throw err;
     }
@@ -429,7 +429,7 @@ export async function initiateDarajaStkPush(
  * Customer is charged KES 30 on OUR shortcode (the only one our passkey is valid
  * for). AccountReference carries the National ID so reconciliation and the
  * onward settlement to the SHA paybill can be matched to the customer.
- * Does NOT mint AfyaTokens.
+ * Does not credit the wallet balance (lockedAfya).
  */
 export async function initiateSHIFDeduction(userId: string, triggerTxRef: string, phone?: string) {
     const simulate = !darajaConfigured();
