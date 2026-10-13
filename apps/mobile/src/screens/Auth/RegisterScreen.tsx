@@ -14,11 +14,25 @@ export default function RegisterScreen() {
     if (!email || !password || !name) return;
     setLoading(true);
     try {
-      await client.post('/auth/register', { email, password, name, role: 'PATIENT' });
+      await client.post('/auth/register', {
+        email: email.trim(),
+        password,
+        fullName: name.trim(),
+        role: 'PATIENT',
+      });
       Alert.alert("Success", "Registration complete! You can now log in.");
       navigation.navigate('Login');
     } catch (e: any) {
-      Alert.alert("Registration Failed", e.response?.data?.message || e.message);
+      const err = e.response?.data?.error;
+      let msg = e.message;
+      if (err?.details && Array.isArray(err.details)) {
+        msg = err.details.map((d: any) => d.message).join('\n');
+      } else if (typeof err === 'string') {
+        msg = err;
+      } else if (err?.message) {
+        msg = err.message;
+      }
+      Alert.alert("Registration Failed", msg);
     } finally {
       setLoading(false);
     }
@@ -67,10 +81,13 @@ export default function RegisterScreen() {
               onChangeText={setPassword}
               secureTextEntry
             />
+            <Text className="text-slate-500 text-xs mt-1 ml-1">
+              12+ characters with an uppercase letter, a number and a special character
+            </Text>
           </View>
         </View>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           className="bg-teal-500 rounded-xl py-4 items-center mb-6 shadow-sm"
           onPress={handleRegister}
           disabled={loading}
