@@ -136,6 +136,9 @@ enum CoverType {
 // ─── TRANSACTION ──────────────────────────────────────────────────────────────
 // M-PESA flow: PENDING -> PROCESSING (atomic claim in finalizePayment)
 //              -> CONFIRMED | FAILED | FLAGGED (amount mismatch, needs review)
+// MERCHANT rows: customer pays (merchant + SHIF) in ONE STK prompt on our shortcode.
+//   After CONFIRMED, merchantAmountKES is forwarded via B2B (settlementStatus tracks it)
+//   and shifAmountKES is settled to the SHA paybill.
 model Transaction {
   id          String             @id @default(uuid())
   txHash      String             @unique
@@ -155,10 +158,20 @@ model Transaction {
   // Daraja / M-PESA fields
   checkoutRequestId String? @unique
   merchantRequestId String? // Daraja MerchantRequestID (returned by STK push)
-  amountKES         Int? // Amount we asked Daraja to charge; callback amount is verified against this
+  amountKES         Int? // Amount we asked Daraja to charge (TOTAL for MERCHANT rows); callback amount is verified against this
   mpesaReceipt      String?
   resultCode        Int?
   resultDesc        String?
+
+  // Merchant checkout (source = MERCHANT)
+  merchantPaybill   String?
+  merchantAccount   String?
+  merchantName      String?
+  merchantAmountKES Int? // Portion forwarded to the merchant
+  shifAmountKES     Int? // Portion settled to SHA (0 if skipped)
+  settlementStatus  SettlementStatus?
+  settlementRef     String? // B2B ConversationID
+  settlementDesc    String? // B2B result description (for support / retries)
 
   @@index([txHash])
   @@index([walletId])
@@ -166,6 +179,7 @@ model Transaction {
   @@index([status, createdAt]) // for finding stuck PENDING / PROCESSING rows
   @@index([source])
   @@index([mpesaReceipt])
+  @@index([settlementStatus])
   @@map("transactions")
 }
 
@@ -180,9 +194,19 @@ enum TxStatus {
 enum ContributionSource {
   MPESA // Direct M-PESA STK Push contribution
   AUTO_DEDUCT // Auto-deducted from an M-PESA user transaction
+  MERCHANT // Single-prompt merchant payment (+ optional SHIF)
   CHALLENGE_BONUS // AfyaScore challenge reward
   GOV_MATCH // Government match top-up
   CHAMA_BOOST // Chama rotating boost (Phase C)
+}
+
+// Disbursement of the merchant portion after the customer's STK is confirmed
+enum SettlementStatus {
+  PENDING // customer payment not yet confirmed, or confirmed and awaiting B2B
+  SENT // B2B request accepted by Daraja, awaiting result callback
+  COMPLETED // merchant paid
+  FAILED // B2B failed/timed out: needs retry or reversal
+  NOT_APPLICABLE // customer payment failed, nothing to disburse
 }
 
 // ─── COVERAGE VERIFICATION ───────────────────────────────────────────────────

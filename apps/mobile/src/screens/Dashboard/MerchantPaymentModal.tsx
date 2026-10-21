@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { startStkPush, startShifPush, waitForPayment, errorMessage } from '../../api/mpesa';
+import { startMerchantPush, waitForPayment, errorMessage } from '../../api/mpesa';
 
 interface MerchantPaymentModalProps {
   visible: boolean;
   onClose: () => void;
   merchantName?: string;
   merchantPaybill?: string;
+  merchantAccount?: string;
   merchantAmount: number;
   nationalId?: string;
   onSuccess?: (details: { merchantAmount: number; shifDeducted: boolean }) => void;
@@ -18,6 +19,7 @@ export default function MerchantPaymentModal({
   onClose,
   merchantName = 'Naivas Supermarket',
   merchantPaybill = '888222',
+  merchantAccount,
   merchantAmount,
   nationalId = '12345678',
   onSuccess,
@@ -42,56 +44,29 @@ export default function MerchantPaymentModal({
     Alert.alert('Payment Failed', message);
   };
 
-  // CHANGED: each prompt is confirmed by the Daraja callback before moving on.
-  const handlePayWithShifDeduct = async () => {
+  // ONE M-PESA prompt for the full total. The server splits it after the
+  // callback confirms: merchant portion -> merchant paybill, KES 30 -> SHIF.
+  const pay = async (includeShif: boolean) => {
     setLoading(true);
     setStep('processing');
+    const shif = includeShif && isQualifying ? shifAmount : 0;
+    setStatusMessage(`Prompt sent! Enter your M-PESA PIN for KES ${merchantAmount + shif}.`);
 
     try {
-      // ── Prompt 1: merchant amount ──
-      setStatusMessage(`Prompt 1 sent! Enter your M-PESA PIN for KES ${merchantAmount}.`);
-      const id1 = await startStkPush({ amount: merchantAmount, description: 'Merchant' });
-      const r1 = await waitForPayment(id1);
-      if (r1.status !== 'SUCCESS') return fail(r1.message || 'Merchant payment was not completed.');
-
-      if (!isQualifying) {
-        setStatusMessage('Payment confirmed.');
-        return finish(false);
-      }
-
-      // ── Prompt 2: KES 30 SHIF (only after prompt 1 is confirmed) ──
-      setStatusMessage(`Prompt 1 confirmed! Prompt 2 sent: enter PIN for KES ${shifAmount} SHIF (A/C ${nationalId}).`);
-      try {
-        const id2 = await startShifPush(id1); // id1 = triggerTxRef; backend sends KES 30 SHIF
-        const r2 = await waitForPayment(id2);
-        if (r2.status === 'SUCCESS') {
-          setStatusMessage('Both payments confirmed.');
-          return finish(true);
-        }
-        setStatusMessage('Merchant paid. SHIF contribution was not completed; you can retry from the Contribute screen.');
-        return finish(false);
-      } catch {
-        setStatusMessage('Merchant paid. SHIF contribution could not be started; you can retry from the Contribute screen.');
-        return finish(false);
-      }
-    } catch (e: any) {
-      fail(errorMessage(e, 'Could not initiate M-PESA payment.'));
-    }
-  };
-
-  const handlePayMerchantOnly = async () => {
-    setLoading(true);
-    setStep('processing');
-    setStatusMessage(`Prompt sent! Enter your M-PESA PIN for KES ${merchantAmount}.`);
-
-    try {
-      const id = await startStkPush({ amount: merchantAmount, description: 'Merchant' });
+      const id = await startMerchantPush({
+        merchantAmount,
+        merchantPaybill,
+        merchantName,
+        merchantAccount,
+        includeShif,
+      });
       const r = await waitForPayment(id);
       if (r.status !== 'SUCCESS') return fail(r.message || 'Payment was not completed.');
-      setStatusMessage('Payment confirmed.');
-      finish(false);
+
+      setStatusMessage(shif ? 'Payment confirmed. SHIF contribution included.' : 'Payment confirmed.');
+      finish(shif > 0);
     } catch (e: any) {
-      fail(errorMessage(e, 'Could not initiate payment.'));
+      fail(errorMessage(e, 'Could not initiate M-PESA payment.'));
     }
   };
 
@@ -125,7 +100,7 @@ export default function MerchantPaymentModal({
 
           {step === 'preview' && (
             <>
-              {/* Dual Deduction Callout */}
+              {/* SHIF Callout */}
               {isQualifying ? (
                 <View className="bg-teal-950/60 border border-teal-500/30 rounded-2xl p-4 mb-4">
                   <View className="flex-row items-center gap-2 mb-1">
@@ -133,8 +108,8 @@ export default function MerchantPaymentModal({
                     <Text className="text-teal-400 font-bold text-sm">Smart SHIF Auto-Deduct Active</Text>
                   </View>
                   <Text className="text-slate-300 text-xs leading-relaxed">
-                    Transactions over KES 100 trigger your daily fixed KES 30 SHIF contribution.
-                    You will receive <Text className="text-white font-bold">2 sequential M-PESA prompts</Text> on your phone.
+                    Transactions over KES 100 include your daily fixed KES 30 SHIF contribution.
+                    You'll get <Text className="text-white font-bold">one M-PESA prompt</Text> for the total.
                   </Text>
                 </View>
               ) : (
@@ -149,11 +124,11 @@ export default function MerchantPaymentModal({
               <View className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-5">
                 <Text className="text-slate-400 text-xs font-mono font-bold tracking-wider mb-3">PAYMENT BREAKDOWN</Text>
 
-                {/* Prompt 1: Merchant */}
+                {/* Merchant */}
                 <View className="flex-row justify-between items-center py-2 border-b border-white/10">
                   <View className="flex-row items-center gap-2">
                     <View className="w-6 h-6 rounded-full bg-slate-700 items-center justify-center">
-                      <Text className="text-white text-xs font-bold">1</Text>
+                      <Feather name="shopping-bag" size={12} color="#CBD5E1" />
                     </View>
                     <View>
                       <Text className="text-white font-medium text-sm">{merchantName}</Text>
@@ -163,19 +138,19 @@ export default function MerchantPaymentModal({
                   <Text className="text-white font-bold text-base">KES {merchantAmount}</Text>
                 </View>
 
-                {/* Prompt 2: SHA SHIF (if qualifying) */}
+                {/* SHIF (if qualifying) */}
                 {isQualifying && (
                   <View className="flex-row justify-between items-center py-2 border-b border-white/10">
                     <View className="flex-row items-center gap-2">
                       <View className="w-6 h-6 rounded-full bg-teal-800 items-center justify-center">
-                        <Text className="text-teal-300 text-xs font-bold">2</Text>
+                        <Feather name="heart" size={12} color="#5EEAD4" />
                       </View>
                       <View>
                         <Text className="text-teal-300 font-medium text-sm">SHIF Healthcare Cover</Text>
                         <Text className="text-slate-500 text-xs">Paybill: 200222 · A/C: {nationalId}</Text>
                       </View>
                     </View>
-                    <Text className="text-teal-400 font-bold text-base">+ KES 30</Text>
+                    <Text className="text-teal-400 font-bold text-base">+ KES {shifAmount}</Text>
                   </View>
                 )}
 
@@ -189,22 +164,22 @@ export default function MerchantPaymentModal({
               {/* Action Buttons */}
               <TouchableOpacity
                 className="bg-teal-500 rounded-2xl py-4 items-center mb-3 flex-row justify-center gap-2"
-                onPress={handlePayWithShifDeduct}
+                onPress={() => pay(true)}
                 disabled={loading}
               >
                 <Feather name="check-circle" size={18} color="white" />
-                <Text className="text-white font-bold text-base">
-                  {isQualifying ? 'Proceed (2 M-PESA Prompts)' : `Pay KES ${merchantAmount}`}
-                </Text>
+                <Text className="text-white font-bold text-base">Pay KES {totalAmount}</Text>
               </TouchableOpacity>
 
               {isQualifying && (
                 <TouchableOpacity
                   className="bg-transparent border border-slate-700 rounded-2xl py-3 items-center"
-                  onPress={handlePayMerchantOnly}
+                  onPress={() => pay(false)}
                   disabled={loading}
                 >
-                  <Text className="text-slate-400 text-xs font-semibold">Pay merchant only (skip SHIF KES 30)</Text>
+                  <Text className="text-slate-400 text-xs font-semibold">
+                    Pay merchant only KES {merchantAmount} (skip SHIF KES {shifAmount})
+                  </Text>
                 </TouchableOpacity>
               )}
             </>

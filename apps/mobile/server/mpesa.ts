@@ -27,6 +27,17 @@ async function getToken(): Promise<string> {
   return tokenCache.token;
 }
 
+export async function startMerchantPush(p: {
+  merchantAmount: number;
+  merchantPaybill: string;
+  merchantName?: string;
+  merchantAccount?: string;
+  includeShif: boolean;
+}): Promise<string> {
+  const res = await api.post('/payment/merchant/stk-push', p);
+  return res.data.data.checkoutRequestId;
+}
+
 // YYYYMMDDHHmmss in Nairobi time (UTC+3)
 function timestamp(): string {
   const d = new Date(Date.now() + 3 * 3600 * 1000);

@@ -1,20 +1,19 @@
 import { Router } from 'express';
 import { paymentController } from '../controllers/payment.controller.js';
-import { authenticate } from '../middleware/auth.js';
-
+import { authenticate as authMiddleware } from '../middleware/auth.js';
 const router = Router();
 
 // ── AUTHENTICATED (mobile app) ────────────────────────────────────────────────
 
 // POST /api/v1/payment/stkpush -> direct contribution STK push (mints AfyaTokens on success)
-router.post('/stkpush', authenticate, paymentController.initiateStkPush);
+router.post('/stkpush', authMiddleware, paymentController.initiateStkPush);
 
 // POST /api/v1/payment/shif-stkpush -> KES 30 SHIF daily deduction STK push (no minting)
-router.post('/shif-stkpush', authenticate, paymentController.initiateSHIFStkPush);
+router.post('/shif-stkpush', authMiddleware, paymentController.initiateSHIFStkPush);
 
 // GET /api/v1/payment/status/:checkoutRequestId -> polled by the app.
 // Falls back to Daraja STK Query if the callback is late or lost.
-router.get('/status/:checkoutRequestId', authenticate, paymentController.getPaymentStatus);
+router.get('/status/:checkoutRequestId', authMiddleware, paymentController.getPaymentStatus);
 
 // ── SAFARICOM WEBHOOKS (NO JWT: Safaricom cannot send one) ────────────────────
 // The :secret path segment is the ONLY thing authenticating these calls.
@@ -27,5 +26,9 @@ router.post('/callback/:secret', paymentController.darajaCallback);
 
 // POST /api/v1/payment/shif-callback/:secret -> KES 30 SHIF result
 router.post('/shif-callback/:secret', paymentController.darajaSHIFCallback);
+
+router.post('/merchant/stk-push', authMiddleware, paymentController.initiateMerchantStkPush);
+router.post('/b2b-result/:secret/:txId', paymentController.b2bResultHandler);   // NO auth
+router.post('/b2b-timeout/:secret/:txId', paymentController.b2bTimeoutHandler); // NO auth
 
 export const paymentRouter = router;

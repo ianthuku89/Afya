@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 // ⚠️ ADJUST THIS IMPORT to match your crypto.ts export (nationalId/phoneNumber are
@@ -9,7 +10,7 @@ import { prisma } from '../lib/prisma.js';
 import { creditShifAccount } from '../services/shifService.js';
 import { getTierFromStreak } from '../routes/afyascore.js';
 
-type ContributionSource = 'MPESA' | 'AUTO_DEDUCT';
+type ContributionSource = 'MPESA' | 'AUTO_DEDUCT' | 'MERCHANT';
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 // SHA SHIF Paybill is the FINAL DESTINATION of the money, not the shortcode we
@@ -20,6 +21,7 @@ type ContributionSource = 'MPESA' | 'AUTO_DEDUCT';
 const SHA_SHIF_PAYBILL = process.env.SHA_SHIF_PAYBILL || '200222';
 const DAILY_SHIF_DEDUCTION = 30; // KES
 const MIN_CONTRIBUTION_KES = 30;
+const SHIF_THRESHOLD_KES = 100; // merchant payments above this trigger the SHIF deduction
 
 const stkPushSchema = z.object({
     amount: z.number().int().min(MIN_CONTRIBUTION_KES).max(10000),
@@ -27,6 +29,15 @@ const stkPushSchema = z.object({
     // Accept 07.., 01.., +254.., 254.. — normalised below
     phone: z.string().optional(),
     description: z.string().max(60).optional(),
+});
+
+const merchantPaySchema = z.object({
+    merchantAmount: z.number().int().min(1).max(150000),
+    merchantPaybill: z.string().regex(/^\d{5,7}$/),
+    merchantAccount: z.string().max(20).optional(),
+    merchantName: z.string().max(60).optional(),
+    includeShif: z.boolean().default(true),
+    phone: z.string().optional(),
 });
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -197,6 +208,7 @@ async function createPendingDarajaTransaction(
     shortCode: string,
     source: ContributionSource,
     amountKES: number,
+    extra: Partial<Prisma.TransactionUncheckedCreateInput> = {},
 ) {
     return prisma.transaction.create({
         data: {
@@ -208,6 +220,7 @@ async function createPendingDarajaTransaction(
             source,
             fromAddress: phoneNumber,
             toAddress: shortCode,
+            ...extra,
         },
     });
 }
@@ -234,6 +247,123 @@ async function markAutoDeductionBatchSettled(userId: string) {
 async function settleToShaPaybill(nationalId: string | null | undefined, amountKES: number) {
     const ref = `${SHA_SHIF_PAYBILL}/${nationalId || 'UNKNOWN'}`;
     await creditShifAccount(nationalId, amountKES, ref);
+}
+
+// ── MERCHANT DISBURSEMENT (B2B) ───────────────────────────────────────────────
+/**
+ * Forwards the merchant portion from OUR shortcode to the merchant's paybill.
+ * Runs only after the customer's STK is CONFIRMED. The atomic PENDING -> SENT claim
+ * guarantees a duplicate callback / retry can never pay the merchant twice.
+ * Final outcome arrives on b2bResultHandler / b2bTimeoutHandler.
+ */
+async function disburseToMerchant(tx: {
+    id: string;
+    merchantPaybill: string | null;
+    merchantAccount: string | null;
+    merchantAmountKES: number | null;
+}) {
+    if (!tx.merchantPaybill || !tx.merchantAmountKES) return;
+
+    const claim = await prisma.transaction.updateMany({
+        where: { id: tx.id, settlementStatus: 'PENDING' },
+        data: { settlementStatus: 'SENT' },
+    });
+    if (claim.count === 0) return;
+
+    // Local dev without Daraja credentials: pretend the disbursement worked.
+    if (!darajaConfigured()) {
+        assertCanSimulate(); // throws in production
+        await prisma.transaction.update({
+            where: { id: tx.id },
+            data: { settlementStatus: 'COMPLETED', settlementRef: 'SIMULATED' },
+        });
+        return;
+    }
+
+    if (!process.env.DARAJA_INITIATOR_NAME || !process.env.DARAJA_SECURITY_CREDENTIAL) {
+        logger.error(`[B2B] DARAJA_INITIATOR_NAME / DARAJA_SECURITY_CREDENTIAL not set. tx=${tx.id} NOT disbursed`);
+        await prisma.transaction.update({
+            where: { id: tx.id },
+            data: { settlementStatus: 'FAILED', settlementDesc: 'B2B not configured' },
+        });
+        return;
+    }
+
+    const base = callbackBase();
+    const secret = process.env.DARAJA_CALLBACK_SECRET;
+    try {
+        const data = await darajaPost('/mpesa/b2b/v1/paymentrequest', {
+            Initiator: process.env.DARAJA_INITIATOR_NAME,
+            SecurityCredential: process.env.DARAJA_SECURITY_CREDENTIAL,
+            CommandID: 'BusinessPayBill',
+            SenderIdentifierType: '4',
+            RecieverIdentifierType: '4', // Safaricom's spelling
+            Amount: tx.merchantAmountKES,
+            PartyA: process.env.DARAJA_SHORTCODE,
+            PartyB: tx.merchantPaybill,
+            AccountReference: (tx.merchantAccount || 'AFYA').slice(0, 12),
+            Remarks: 'Merchant payment',
+            QueueTimeOutURL: `${base}/b2b-timeout/${secret}/${tx.id}`,
+            ResultURL: `${base}/b2b-result/${secret}/${tx.id}`,
+        });
+
+        if (String(data.ResponseCode) !== '0') {
+            logger.error(`[B2B] request rejected tx=${tx.id}`, data);
+            await prisma.transaction.update({
+                where: { id: tx.id },
+                data: {
+                    settlementStatus: 'FAILED',
+                    settlementDesc: data.ResponseDescription || data.errorMessage || 'B2B rejected',
+                },
+            });
+            return;
+        }
+        await prisma.transaction.update({
+            where: { id: tx.id },
+            data: { settlementRef: data.ConversationID },
+        });
+    } catch (err) {
+        // Network error: we can't know whether Daraja accepted it. Leave as SENT so we never
+        // double-pay automatically; ops must check the Daraja portal before retrying.
+        logger.error(`[B2B] request errored tx=${tx.id}. Status unknown, check Daraja before retrying`, err);
+        await prisma.transaction.update({
+            where: { id: tx.id },
+            data: { settlementDesc: 'B2B request errored: verify in Daraja portal before retry' },
+        });
+    }
+}
+
+/**
+ * Manual/ops retry for a FAILED disbursement. Only call this after confirming
+ * (Daraja portal) that the merchant was NOT actually paid.
+ */
+export async function retryMerchantDisbursement(txId: string) {
+    const reopened = await prisma.transaction.updateMany({
+        where: { id: txId, source: 'MERCHANT', status: 'CONFIRMED', settlementStatus: 'FAILED' },
+        data: { settlementStatus: 'PENDING', settlementDesc: null },
+    });
+    if (reopened.count === 0) return false;
+    const tx = await prisma.transaction.findUnique({ where: { id: txId } });
+    if (tx) await disburseToMerchant(tx);
+    return true;
+}
+
+/**
+ * Safety net (call from a cron every few minutes): confirmed merchant payments whose
+ * disbursement never started, e.g. the server crashed right after confirmation.
+ */
+export async function disbursePendingMerchantSettlements() {
+    const stuck = await prisma.transaction.findMany({
+        where: {
+            source: 'MERCHANT',
+            status: 'CONFIRMED',
+            settlementStatus: 'PENDING',
+            createdAt: { lt: new Date(Date.now() - 2 * 60 * 1000) },
+        },
+        take: 50,
+    });
+    for (const tx of stuck) await disburseToMerchant(tx);
+    return stuck.length;
 }
 
 // ── THE ONE PLACE A PAYMENT IS FINALISED ──────────────────────────────────────
@@ -272,12 +402,19 @@ export async function finalizePayment(checkoutRequestId: string, outcome: Outcom
 
     const userId = tx.wallet.userId;
     const isAutoDeduct = tx.source === 'AUTO_DEDUCT';
+    const isMerchant = tx.source === 'MERCHANT';
+    const isDirect = tx.source === 'MPESA';
 
     // ── Failed / cancelled / timed out ──
     if (outcome.resultCode !== 0) {
         await prisma.transaction.update({
             where: { id: tx.id },
-            data: { status: 'FAILED', resultCode: outcome.resultCode, resultDesc: outcome.resultDesc },
+            data: {
+                status: 'FAILED',
+                resultCode: outcome.resultCode,
+                resultDesc: outcome.resultDesc,
+                ...(isMerchant ? { settlementStatus: 'NOT_APPLICABLE' as const } : {}),
+            },
         });
         if (isAutoDeduct) {
             await prisma.autoDeductionLog.updateMany({
@@ -306,19 +443,18 @@ export async function finalizePayment(checkoutRequestId: string, outcome: Outcom
     }
 
     // Record the confirmed payment. No on-chain step: the DB is the ledger.
-    // txHash is kept (likely NOT NULL / unique in the schema) but now holds a
-    // local ledger reference instead of a blockchain hash.
+    // Only direct contributions credit lockedAfya; merchant/auto-deduct rows do not.
     const ledgerRef = `LEDGER_${tx.id}`;
     try {
         await prisma.$transaction([
-            ...(!isAutoDeduct
+            ...(isDirect
                 ? [prisma.wallet.update({ where: { id: tx.wallet.id }, data: { lockedAfya: { increment: amountKES } } })]
                 : []),
             prisma.transaction.update({
                 where: { id: tx.id },
                 data: {
                     status: 'CONFIRMED',
-                    amountAfya: isAutoDeduct ? 0 : amountKES,
+                    amountAfya: isDirect ? amountKES : 0,
                     txHash: ledgerRef,
                     mpesaReceipt: outcome.receipt,
                     resultCode: 0,
@@ -334,13 +470,36 @@ export async function finalizePayment(checkoutRequestId: string, outcome: Outcom
     }
 
     // Post-confirmation steps: a failure here must NOT undo the confirmed payment
+    const nationalId = readPii(tx.wallet.user?.nationalId);
     try {
-        if (isAutoDeduct) await markAutoDeductionBatchSettled(userId);
-        else await recordContributionAmount(userId, amountKES); // counted once, only after payment
-        await updateAfyaStreakOnContribution(userId);
-        await settleToShaPaybill(readPii(tx.wallet.user?.nationalId), amountKES);
+        if (isMerchant) {
+            // Only the SHIF portion goes to SHA, never the full amount
+            const shif = tx.shifAmountKES ?? 0;
+            if (shif > 0) {
+                await recordContributionAmount(userId, shif);
+                await updateAfyaStreakOnContribution(userId);
+                await settleToShaPaybill(nationalId, shif);
+            }
+        } else if (isAutoDeduct) {
+            await markAutoDeductionBatchSettled(userId);
+            await updateAfyaStreakOnContribution(userId);
+            await settleToShaPaybill(nationalId, amountKES);
+        } else {
+            await recordContributionAmount(userId, amountKES); // counted once, only after payment
+            await updateAfyaStreakOnContribution(userId);
+            await settleToShaPaybill(nationalId, amountKES);
+        }
     } catch (err) {
         logger.error(`[finalize] post-confirm steps failed for tx=${tx.id}, needs reconciliation`, err);
+    }
+
+    // Disbursement is its own step so a SHIF-side failure can't block paying the merchant
+    if (isMerchant) {
+        try {
+            await disburseToMerchant(tx);
+        } catch (err) {
+            logger.error(`[finalize] merchant disbursement threw for tx=${tx.id}`, err);
+        }
     }
     return 'confirmed' as const;
 }
@@ -430,6 +589,9 @@ export async function initiateDarajaStkPush(
  * for). AccountReference carries the National ID so reconciliation and the
  * onward settlement to the SHA paybill can be matched to the customer.
  * Does not credit the wallet balance (lockedAfya).
+ *
+ * Still used by the Contribute screen to retry a SHIF payment on its own.
+ * The merchant checkout no longer uses this: it bundles SHIF into one prompt.
  */
 export async function initiateSHIFDeduction(userId: string, triggerTxRef: string, phone?: string) {
     const simulate = !darajaConfigured();
@@ -506,6 +668,96 @@ export async function initiateSHIFDeduction(userId: string, triggerTxRef: string
     }
 }
 
+// ── STK PUSH #3: SINGLE-PROMPT MERCHANT PAYMENT (merchant + SHIF) ─────────────
+/**
+ * ONE prompt for the full total on OUR shortcode. After the callback confirms it:
+ *   • merchantAmount is forwarded to the merchant paybill via B2B
+ *   • shifAmount (KES 30) is settled to the SHA paybill
+ * The server computes the SHIF amount itself and never trusts the client.
+ */
+export async function initiateMerchantPayment(userId: string, p: z.infer<typeof merchantPaySchema>) {
+    const simulate = !darajaConfigured();
+    if (simulate) assertCanSimulate(); // throws in production
+
+    const [user, wallet] = await Promise.all([
+        prisma.user.findUnique({ where: { id: userId }, select: { phoneNumber: true } }),
+        prisma.wallet.findUnique({ where: { userId }, select: { id: true } }),
+    ]);
+    if (!wallet) throw new Error('Wallet not found for user');
+
+    const phoneNumber = normalizeMsisdn(p.phone) || normalizeMsisdn(readPii(user?.phoneNumber));
+    if (!phoneNumber) throw new Error('A valid Safaricom phone number is required');
+
+    const shifAmount = p.includeShif && p.merchantAmount > SHIF_THRESHOLD_KES ? DAILY_SHIF_DEDUCTION : 0;
+    const total = p.merchantAmount + shifAmount;
+
+    const shortCode = process.env.DARAJA_SHORTCODE || '174379';
+    const tx = await createPendingDarajaTransaction(wallet.id, phoneNumber, shortCode, 'MERCHANT', total, {
+        merchantPaybill: p.merchantPaybill,
+        merchantAccount: p.merchantAccount,
+        merchantName: p.merchantName,
+        merchantAmountKES: p.merchantAmount,
+        shifAmountKES: shifAmount,
+        settlementStatus: 'PENDING',
+    });
+
+    if (simulate) {
+        const checkoutRequestId = `ws_CO_${crypto.randomBytes(6).toString('hex')}`;
+        await prisma.transaction.update({ where: { id: tx.id }, data: { checkoutRequestId } });
+        await finalizePayment(checkoutRequestId, {
+            resultCode: 0,
+            resultDesc: 'Simulated',
+            receipt: 'SIMULATED',
+            paidAmount: total,
+        });
+        return { success: true, checkoutRequestId, transactionId: tx.id, total, shifAmount };
+    }
+
+    try {
+        const stk = await sendStkPush({
+            amount: total,
+            phone: phoneNumber,
+            callbackUrl: callbackUrl(),
+            accountRef: `PAY${tx.id.replace(/-/g, '').slice(0, 9)}`, // 12 chars
+            description: 'Lipa na MPESA',
+        });
+
+        if (String(stk.ResponseCode) !== '0') {
+            await prisma.transaction.update({
+                where: { id: tx.id },
+                data: {
+                    status: 'FAILED',
+                    settlementStatus: 'NOT_APPLICABLE',
+                    resultDesc: stk.ResponseDescription || stk.errorMessage,
+                },
+            });
+            return {
+                success: false,
+                error: 'M-PESA request failed',
+                detail: stk.ResponseDescription || stk.errorMessage,
+            };
+        }
+
+        await prisma.transaction.update({
+            where: { id: tx.id },
+            data: { checkoutRequestId: stk.CheckoutRequestID, merchantRequestId: stk.MerchantRequestID },
+        });
+        return {
+            success: true,
+            checkoutRequestId: stk.CheckoutRequestID as string,
+            transactionId: tx.id,
+            total,
+            shifAmount,
+        };
+    } catch (err) {
+        await prisma.transaction.update({
+            where: { id: tx.id },
+            data: { status: 'FAILED', settlementStatus: 'NOT_APPLICABLE' },
+        });
+        throw err;
+    }
+}
+
 // ── STREAK & TIER UPDATE ──────────────────────────────────────────────────────
 // Day boundaries use East Africa Time (UTC+3), so a payment at 01:00 in Nairobi
 // counts for that Nairobi day rather than the previous UTC day.
@@ -565,7 +817,7 @@ export async function recordContributionAmount(userId: string, amountKES: number
     }
 }
 
-// ── DARAJA CALLBACK (shared by direct + SHIF routes) ──────────────────────────
+// ── DARAJA STK CALLBACK (shared by direct + SHIF + merchant routes) ───────────
 const stkCallbackHandler = async (req: Request, res: Response) => {
     // Daraja expects exactly this acknowledgement shape, always with HTTP 200
     const ack = { ResultCode: 0, ResultDesc: 'Accepted' };
@@ -597,6 +849,61 @@ const stkCallbackHandler = async (req: Request, res: Response) => {
         logger.error('[Daraja callback] finalize error', err);
     }
     return res.status(200).json(ack);
+};
+
+// ── DARAJA B2B CALLBACKS (merchant disbursement result) ───────────────────────
+const b2bAck = { ResultCode: 0, ResultDesc: 'Accepted' };
+
+const b2bResultHandler = async (req: Request, res: Response) => {
+    if (!validCallbackSecret(req.params.secret)) {
+        logger.warn('[B2B result] rejected: bad secret');
+        return res.status(403).json({ success: false });
+    }
+    const txId = req.params.txId;
+    const result = req.body?.Result;
+    if (!result) return res.status(400).json({ success: false, error: 'Invalid payload' });
+
+    const ok = Number(result.ResultCode) === 0;
+    try {
+        // Only a row we actually SENT can be completed/failed by a result
+        const upd = await prisma.transaction.updateMany({
+            where: { id: txId, source: 'MERCHANT', settlementStatus: 'SENT' },
+            data: {
+                settlementStatus: ok ? 'COMPLETED' : 'FAILED',
+                settlementDesc: result.ResultDesc,
+                ...(result.ConversationID ? { settlementRef: String(result.ConversationID) } : {}),
+            },
+        });
+        if (!ok) {
+            // 🚨 Customer paid but merchant not: alert ops, then retryMerchantDisbursement / Daraja Reversal
+            logger.error(
+                `[B2B result] DISBURSEMENT FAILED tx=${txId} code=${result.ResultCode} ${result.ResultDesc}. NEEDS RETRY/REVERSAL`,
+            );
+        } else {
+            logger.info(`[B2B result] merchant paid tx=${txId} (updated=${upd.count})`);
+        }
+    } catch (err) {
+        logger.error('[B2B result] handler error', err);
+    }
+    return res.status(200).json(b2bAck);
+};
+
+const b2bTimeoutHandler = async (req: Request, res: Response) => {
+    if (!validCallbackSecret(req.params.secret)) {
+        logger.warn('[B2B timeout] rejected: bad secret');
+        return res.status(403).json({ success: false });
+    }
+    const txId = req.params.txId;
+    try {
+        await prisma.transaction.updateMany({
+            where: { id: txId, source: 'MERCHANT', settlementStatus: 'SENT' },
+            data: { settlementStatus: 'FAILED', settlementDesc: 'B2B queue timeout' },
+        });
+        logger.error(`[B2B timeout] tx=${txId} timed out in Daraja queue. Verify in portal, then retry`);
+    } catch (err) {
+        logger.error('[B2B timeout] handler error', err);
+    }
+    return res.status(200).json(b2bAck);
 };
 
 // ── CONTROLLER ────────────────────────────────────────────────────────────────
@@ -679,8 +986,46 @@ export const paymentController = {
         }
     },
 
+    // Route: POST /payment/merchant/stk-push  (auth required)
+    initiateMerchantStkPush: async (req: Request, res: Response) => {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+            const data = merchantPaySchema.parse(req.body);
+            if (data.phone && !normalizeMsisdn(data.phone)) {
+                return res.status(400).json({ success: false, error: 'Invalid phone number' });
+            }
+
+            const result = await initiateMerchantPayment(userId, data);
+            if (!result.success) {
+                logger.error('Merchant STK Push failed:', (result as any).detail || result.error);
+                return res.status(502).json({
+                    success: false,
+                    error: result.error || 'M-PESA request failed',
+                    detail: (result as any).detail,
+                });
+            }
+            return res.status(200).json({
+                success: true,
+                message: 'STK Push sent to your phone',
+                data: {
+                    checkoutRequestId: result.checkoutRequestId,
+                    total: result.total,
+                    shifAmount: result.shifAmount,
+                },
+            });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                return res.status(400).json({ success: false, error: error.errors });
+            }
+            logger.error('Merchant STK Push Error:', error);
+            return res.status(500).json({ success: false, error: 'Payment initialization failed' });
+        }
+    },
+
     /**
-     * App polls this with the CheckoutRequestID returned by either push.
+     * App polls this with the CheckoutRequestID returned by any push.
      * If the Daraja callback is late or lost, it asks Daraja directly (STK Query).
      */
     getPaymentStatus: async (req: Request, res: Response) => {
@@ -730,6 +1075,7 @@ export const paymentController = {
                     source: tx.source,
                     receipt: tx.mpesaReceipt,
                     resultCode: tx.resultCode,
+                    settlement: tx.source === 'MERCHANT' ? tx.settlementStatus : undefined,
                     message:
                         tx.status === 'FLAGGED'
                             ? 'Your payment is under review. Please contact support with your M-PESA receipt.'
@@ -745,8 +1091,15 @@ export const paymentController = {
     },
 
     // Route: POST /payment/callback/:secret  (NO auth middleware)
+    // Also used by merchant payments (same STK callback URL)
     darajaCallback: stkCallbackHandler,
 
     // Route: POST /payment/shif-callback/:secret  (NO auth middleware)
     darajaSHIFCallback: stkCallbackHandler,
+
+    // Route: POST /payment/b2b-result/:secret/:txId  (NO auth middleware)
+    b2bResultHandler,
+
+    // Route: POST /payment/b2b-timeout/:secret/:txId  (NO auth middleware)
+    b2bTimeoutHandler,
 };
