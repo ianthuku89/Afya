@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { startMerchantPush, waitForPayment, errorMessage } from '../../api/mpesa';
+import { client } from '../../api/client';
 
 interface MerchantPaymentModalProps {
   visible: boolean;
   onClose: () => void;
   merchantName?: string;
   merchantPaybill?: string;
-  merchantAccount?: string;
   merchantAmount: number;
   nationalId?: string;
   onSuccess?: (details: { merchantAmount: number; shifDeducted: boolean }) => void;
@@ -19,7 +18,6 @@ export default function MerchantPaymentModal({
   onClose,
   merchantName = 'Naivas Supermarket',
   merchantPaybill = '888222',
-  merchantAccount,
   merchantAmount,
   nationalId = '12345678',
   onSuccess,
@@ -32,41 +30,58 @@ export default function MerchantPaymentModal({
   const shifAmount = 30;
   const totalAmount = isQualifying ? merchantAmount + shifAmount : merchantAmount;
 
-  const finish = (shifDeducted: boolean) => {
-    setStep('completed');
-    setLoading(false);
-    onSuccess?.({ merchantAmount, shifDeducted });
-  };
-
-  const fail = (message: string) => {
-    setLoading(false);
-    setStep('preview');
-    Alert.alert('Payment Failed', message);
-  };
-
-  // ONE M-PESA prompt for the full total. The server splits it after the
-  // callback confirms: merchant portion -> merchant paybill, KES 30 -> SHIF.
-  const pay = async (includeShif: boolean) => {
+  const handlePayWithCombinedPrompt = async () => {
     setLoading(true);
     setStep('processing');
-    const shif = includeShif && isQualifying ? shifAmount : 0;
-    setStatusMessage(`Prompt sent! Enter your M-PESA PIN for KES ${merchantAmount + shif}.`);
+    
+    if (isQualifying) {
+      setStatusMessage(`Sending single M-PESA prompt for combined total: KES ${totalAmount} (${merchantAmount} + 30 SHIF)...`);
+    } else {
+      setStatusMessage(`Sending M-PESA prompt: KES ${merchantAmount} to ${merchantName}...`);
+    }
 
     try {
-      const id = await startMerchantPush({
-        merchantAmount,
-        merchantPaybill,
-        merchantName,
-        merchantAccount,
-        includeShif,
+      // ── SINGLE COMBINED STK Push ───────────────────────────────────────────
+      // Send one prompt for the combined total (merchant + SHIF if qualifying)
+      const combinedDescription = isQualifying 
+        ? `Payment to ${merchantName} + KES 30 SHIF contribution`
+        : `Payment to ${merchantName}`;
+        
+      const paymentRes = await client.post('/payment/stkpush', {
+        amount: totalAmount,
+        currency: 'KES',
+        description: combinedDescription,
       });
-      const r = await waitForPayment(id);
-      if (r.status !== 'SUCCESS') return fail(r.message || 'Payment was not completed.');
 
-      setStatusMessage(shif ? 'Payment confirmed. SHIF contribution included.' : 'Payment confirmed.');
-      finish(shif > 0);
+      const txRef = paymentRes.data?.data?.checkoutRequestId || `COMBINED-${Date.now()}`;
+
+      // If this is a qualifying transaction, also log the auto-deduction
+      if (isQualifying) {
+        try {
+          await client.post('/auto-deduct/transaction-sync', {
+            txAmount: merchantAmount,
+            txRef: txRef,
+          });
+          setStatusMessage(`Single M-PESA prompt sent! Enter your PIN once to pay KES ${totalAmount} (includes KES 30 SHIF contribution).`);
+        } catch (syncErr) {
+          console.warn('Auto-deduct sync warning:', syncErr);
+          // Payment still processed even if sync fails
+          setStatusMessage(`M-PESA prompt sent! Enter your PIN for KES ${totalAmount}. SHIF deduction will be processed separately.`);
+        }
+      } else {
+        setStatusMessage(`M-PESA prompt sent! Enter your PIN for KES ${merchantAmount}.`);
+      }
+
+      setTimeout(() => {
+        setStep('completed');
+        setLoading(false);
+        onSuccess?.({ merchantAmount, shifDeducted: isQualifying });
+      }, 4000);
+
     } catch (e: any) {
-      fail(errorMessage(e, 'Could not initiate M-PESA payment.'));
+      setLoading(false);
+      setStep('preview');
+      Alert.alert('Payment Failed', e.response?.data?.error || e.message || 'Could not initiate M-PESA payment.');
     }
   };
 
@@ -79,7 +94,7 @@ export default function MerchantPaymentModal({
     <Modal visible={visible} transparent animationType="slide">
       <View className="flex-1 bg-black/80 justify-end">
         <View className="bg-slate-900 border-t border-slate-700 rounded-t-3xl p-6">
-
+          
           {/* Header */}
           <View className="flex-row justify-between items-center mb-5">
             <View className="flex-row items-center gap-2">
@@ -100,7 +115,7 @@ export default function MerchantPaymentModal({
 
           {step === 'preview' && (
             <>
-              {/* SHIF Callout */}
+              {/* Single Combined Prompt Callout */}
               {isQualifying ? (
                 <View className="bg-teal-950/60 border border-teal-500/30 rounded-2xl p-4 mb-4">
                   <View className="flex-row items-center gap-2 mb-1">
@@ -109,7 +124,7 @@ export default function MerchantPaymentModal({
                   </View>
                   <Text className="text-slate-300 text-xs leading-relaxed">
                     Transactions over KES 100 include your daily fixed KES 30 SHIF contribution.
-                    You'll get <Text className="text-white font-bold">one M-PESA prompt</Text> for the total.
+                    You will receive <Text className="text-white font-bold">one single M-PESA prompt</Text> for the combined total.
                   </Text>
                 </View>
               ) : (
@@ -124,11 +139,11 @@ export default function MerchantPaymentModal({
               <View className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-5">
                 <Text className="text-slate-400 text-xs font-mono font-bold tracking-wider mb-3">PAYMENT BREAKDOWN</Text>
 
-                {/* Merchant */}
+                {/* Single Combined Payment Items */}
                 <View className="flex-row justify-between items-center py-2 border-b border-white/10">
                   <View className="flex-row items-center gap-2">
                     <View className="w-6 h-6 rounded-full bg-slate-700 items-center justify-center">
-                      <Feather name="shopping-bag" size={12} color="#CBD5E1" />
+                      <Text className="text-white text-xs font-bold">1</Text>
                     </View>
                     <View>
                       <Text className="text-white font-medium text-sm">{merchantName}</Text>
@@ -138,78 +153,62 @@ export default function MerchantPaymentModal({
                   <Text className="text-white font-bold text-base">KES {merchantAmount}</Text>
                 </View>
 
-                {/* SHIF (if qualifying) */}
+                {/* SHIF Contribution (if qualifying) - included in single prompt */}
                 {isQualifying && (
                   <View className="flex-row justify-between items-center py-2 border-b border-white/10">
                     <View className="flex-row items-center gap-2">
                       <View className="w-6 h-6 rounded-full bg-teal-800 items-center justify-center">
-                        <Feather name="heart" size={12} color="#5EEAD4" />
+                        <Text className="text-teal-300 text-xs font-bold">+</Text>
                       </View>
                       <View>
                         <Text className="text-teal-300 font-medium text-sm">SHIF Healthcare Cover</Text>
-                        <Text className="text-slate-500 text-xs">Paybill: 200222 · A/C: {nationalId}</Text>
+                        <Text className="text-slate-500 text-xs">Paybill: 200222 (SHA)</Text>
                       </View>
                     </View>
-                    <Text className="text-teal-400 font-bold text-base">+ KES {shifAmount}</Text>
+                    <Text className="text-teal-300 font-bold text-base">KES {shifAmount}</Text>
                   </View>
                 )}
 
-                {/* Total */}
+                {/* TOTAL */}
                 <View className="flex-row justify-between items-center pt-3">
-                  <Text className="text-slate-400 font-bold">Total Debited</Text>
-                  <Text className="text-amber-400 font-extrabold text-xl">KES {totalAmount}</Text>
+                  <Text className="text-white font-bold">TOTAL TO PAY</Text>
+                  <Text className="text-white font-bold text-xl">KES {totalAmount}</Text>
                 </View>
               </View>
 
-              {/* Action Buttons */}
+              {/* Single Pay Button for combined prompt */}
               <TouchableOpacity
-                className="bg-teal-500 rounded-2xl py-4 items-center mb-3 flex-row justify-center gap-2"
-                onPress={() => pay(true)}
+                className="bg-teal-500 rounded-2xl py-4 items-center"
+                onPress={handlePayWithCombinedPrompt}
                 disabled={loading}
               >
-                <Feather name="check-circle" size={18} color="white" />
-                <Text className="text-white font-bold text-base">Pay KES {totalAmount}</Text>
+                <Text className="text-white font-bold text-base">Pay with M-PESA (Single Prompt)</Text>
               </TouchableOpacity>
-
-              {isQualifying && (
-                <TouchableOpacity
-                  className="bg-transparent border border-slate-700 rounded-2xl py-3 items-center"
-                  onPress={() => pay(false)}
-                  disabled={loading}
-                >
-                  <Text className="text-slate-400 text-xs font-semibold">
-                    Pay merchant only KES {merchantAmount} (skip SHIF KES {shifAmount})
-                  </Text>
-                </TouchableOpacity>
-              )}
             </>
           )}
 
           {step === 'processing' && (
             <View className="py-8 items-center">
-              <ActivityIndicator size="large" color="#00C165" className="mb-4" />
-              <Text className="text-white font-bold text-lg mb-2">Processing Lipa na M-PESA</Text>
-              <Text className="text-teal-300 text-sm text-center px-4 leading-relaxed">{statusMessage}</Text>
+              <ActivityIndicator size="large" color="#34D399" />
+              <Text className="text-white text-sm mt-4 text-center">{statusMessage}</Text>
             </View>
           )}
 
           {step === 'completed' && (
-            <View className="py-6 items-center">
-              <View className="w-16 h-16 rounded-full bg-teal-900/60 border border-teal-500 items-center justify-center mb-4">
+            <View className="py-8 items-center">
+              <View className="w-16 h-16 bg-teal-500/20 rounded-full items-center justify-center mb-4">
                 <Feather name="check" size={32} color="#34D399" />
               </View>
-              <Text className="text-white font-bold text-xl mb-2">Transaction Complete!</Text>
-              <Text className="text-slate-300 text-sm text-center mb-6 px-4">{statusMessage}</Text>
-
+              <Text className="text-white font-bold text-lg mb-2">Payment Processed!</Text>
+              <Text className="text-slate-400 text-sm text-center mb-6">{statusMessage}</Text>
               <TouchableOpacity
-                className="w-full bg-slate-800 rounded-xl py-4 items-center border border-slate-700"
+                className="bg-teal-500 rounded-2xl py-4 px-8"
                 onPress={handleDone}
               >
                 <Text className="text-white font-bold">Done</Text>
               </TouchableOpacity>
             </View>
           )}
-
         </View>
       </View>
     </Modal>

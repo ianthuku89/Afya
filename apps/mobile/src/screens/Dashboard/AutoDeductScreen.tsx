@@ -160,9 +160,9 @@ export default function AutoDeductScreen() {
                             <Text className="text-teal-400 font-bold text-sm">2</Text>
                         </View>
                         <View className="flex-1">
-                            <Text className="text-white font-bold text-sm mb-1">Receive Sequential Prompts</Text>
+                            <Text className="text-white font-bold text-sm mb-1">Single Combined Prompt</Text>
                             <Text className="text-slate-400 text-xs leading-relaxed">
-                                You receive prompt #1 for the merchant amount, followed by prompt #2 for the KES 30 SHIF contribution.
+                                You receive <Text className="text-white font-bold">one single M-PESA prompt</Text> for the combined total (merchant amount + KES 30 SHIF contribution). Enter your PIN once to complete both payments.
                             </Text>
                         </View>
                     </View>

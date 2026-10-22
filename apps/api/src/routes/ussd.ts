@@ -1,131 +1,121 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { logger } from '../lib/logger.js';
-import crypto from 'crypto';
+import { prisma } from '../lib/prisma.js';  // ✅ CORRECT IMPORT - matches all other files
 
 const router = Router();
-const prisma = new PrismaClient();
 
-// Simulated Daraja STK Push trigger (reuse from loyalty logic in production)
-async function triggerSTKPush(phoneNumber: string, amount: number, reference: string) {
-    logger.info(`[USSD] STK Push to ${phoneNumber} for KES ${amount} (Ref: ${reference})`);
-    return { success: true };
-}
-
-router.post('/', async (req, res) => {
-    // Expected Africa's Talking payload structure
+// USSD Entry Point - handles Safaricom USSD callbacks
+router.post('/ussd', async (req, res) => {
     const { sessionId, serviceCode, phoneNumber, text } = req.body;
-
-    let response = '';
+    const msisdn = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber.replace(/^254/, '254')}`;
     
-    // Normalize phone number to match DB (assuming 254... format)
-    // AT usually sends +254xxxxxxxxx
-    const formattedPhone = phoneNumber?.replace('+', '') || '254700000000';
+    // Split input text into array
+    const textArray = text.split('*').filter(Boolean);
+    const level = textArray.length;
 
-    // Find the user connected to this phone number
-        const user = await prisma.user.findFirst({
-            where: { phoneNumber: formattedPhone },
-        include: {
-            wallet: true,
-            afyaScore: true
+    // Main menu response
+    const mainMenuResponse = `CON Welcome to HealthToken Kenya\n1. My Wallet\n2. Auto-Deduct Settings\n3. Transaction History\n4. Help & Support`;
+
+    // Initial request - main menu
+    if (text === '') {
+        const user = await prisma.user.findUnique({
+            where: { phoneNumber: msisdn },
+            include: { wallet: true }
+        });
+
+        if (!user) {
+            return res.send(`END Please register with HealthToken first. Dial *XXX*XXXX# to sign up.`);
         }
+
+        return res.send(mainMenuResponse);
+    }
+
+    // Get user for processing menu selections
+    const user = await prisma.user.findUnique({
+        where: { phoneNumber: msisdn },
+        include: { wallet: true }
     });
 
     if (!user) {
-        response = `END Welcome to AfyaToken SHIF.\nWe could not find an account linked to this number. Please register via the mobile app first.`;
-        res.set('Content-Type', 'text/plain');
-        return res.send(response);
+        return res.send(`END User not found. Please register first.`);
     }
 
-    const textArray = text ? text.split('*') : [];
-    const level = textArray.length;
+    let response = '';
 
-    try {
-        if (text === '') {
-            // Main Menu
-                response = `CON Welcome to AfyaToken SHIF, ${user.fullName || 'Member'}.\n`;
-            response += `1. Check Coverage & AfyaScore\n`;
-            response += `2. Auto-Deduct Settings\n`;
-            response += `3. Boost Coverage`;
-        } 
-        else if (textArray[0] === '1') {
-            // Check Coverage
-            const status = user.wallet?.coverageStatus || 'INACTIVE';
-            const score = user.afyaScore?.score || 0;
-            const tier = user.afyaScore?.tier || 'BRONZE';
-            
-            response = `END Your Coverage Status:\n`;
-            response += `Status: ${status}\n`;
-            response += `AfyaScore: ${score}\n`;
-            response += `Tier: ${tier}`;
-        }
-        else if (textArray[0] === '2') {
-            // Auto-Deduct Settings
-            if (level === 1) {
-                const optInStatus = user.wallet?.autoDeductOptIn ? 'ENABLED' : 'DISABLED';
-                response = `CON M-PESA Auto-Deduct is ${optInStatus}.\n`;
-                response += `1. Opt-in\n`;
-                response += `2. View Max Daily Ceiling`;
-            } else if (level === 2 && textArray[1] === '1') {
-                // Opt-in (KDPA warning)
-                response = `CON By proceeding, you allow AfyaToken to analyze transactions for SHIF micro-deductions.\n1. Confirm Opt-in`;
-            } else if (level === 3 && textArray[1] === '1' && textArray[2] === '1') {
-                // Confirm Opt-in
-                await prisma.wallet.update({
-                    where: { userId: user.id },
-                    data: { autoDeductOptIn: true }
-                });
-                // Log Consent
-                await prisma.consentRecord.create({
-                    data: {
-                        userId: user.id,
-                        consentType: 'loyalty_auto_contribute',
-                        granted: true,
-                        ipAddress: 'USSD_GATEWAY'
-                    }
-                });
-                response = `END You have successfully opted into M-PESA Auto-Deductions.`;
-            } else if (level === 2 && textArray[1] === '2') {
-                response = `END Your M-PESA Auto-Deduct daily ceiling is set to KES 50.\nTo protect users, this limit is system-controlled and cannot be manually modified.`;
-            } else if (level === 2 && textArray[1] === '3') {
-                // View Max Daily Ceiling (Admin controlled)
-                response = `END Your M-PESA Auto-Deduct daily ceiling is set to KES 50.\nTo protect users, this limit is system-controlled and cannot be manually modified.`;
+    // Main Menu Options
+    if (textArray[0] === '1') {
+        // My Wallet
+        const balance = user.wallet?.balance || 0;
+        const autoDeduct = user.wallet?.autoDeductOptIn ? 'Enabled' : 'Disabled';
+        response = `END Your HealthToken Wallet Balance: KES ${balance}\nAuto-Deduct: ${autoDeduct}\nDaily SHIF Contributions: Processed with your first qualifying merchant payment.`;
+    } 
+    else if (textArray[0] === '2') {
+        // Auto-Deduct Settings - SINGLE PROMPT FLOW (your updated logic)
+        const optInStatus = user.wallet?.autoDeductOptIn ? 'ENABLED' : 'DISABLED';
+        
+        if (level === 1) {
+            // Single confirmation prompt instead of multi-step
+            if (optInStatus) {
+                // Already opted in - show status and options
+                response = `CON M-PESA Auto-Deduct is ${optInStatus}.\nYour daily KES 30 SHIF contribution is active.\n1. View Daily Ceiling\n2. Return to Main Menu`;
             } else {
-                response = `END Invalid Choice. Please try again.`;
+                // Single opt-in confirmation prompt
+                response = `CON Enable Auto-Deduct? By pressing 1, you confirm you want to opt in to M-PESA Auto-Deductions. A fixed KES 30 daily SHIF contribution will be added to your first qualifying merchant payment over KES 100.\n1. Confirm & Enable Auto-Deduct\n2. Cancel`;
             }
-        }
-        else if (textArray[0] === '3') {
-            // Boost Coverage
-            if (level === 1) {
-                response = `CON Enter amount to contribute to your SHIF cover via M-PESA (Min 50):`;
-            } else if (level === 2) {
-                const amount = Number(textArray[1]);
-                if (isNaN(amount) || amount < 50) {
-                    response = `END Invalid amount. Minimum contribution is KES 50.`;
-                } else {
-                    // Trigger STK Push
-                    // In a highly production system, we'd log a pending tx here before returning.
-                    await triggerSTKPush(formattedPhone, amount, `USSD_${user.id.substring(0,6)}`);
-                    response = `END Thank you. Please check your phone for an M-PESA PIN prompt to finalize your KES ${amount} contribution.`;
+        } else if (level === 2 && !user.wallet?.autoDeductOptIn && textArray[1] === '1') {
+            // Single step confirmation - process opt-in immediately
+            await prisma.wallet.update({
+                where: { userId: user.id },
+                data: { autoDeductOptIn: true }
+            });
+            // Log Consent
+            await prisma.consentRecord.create({
+                data: {
+                    userId: user.id,
+                    consentType: 'loyalty_auto_contribute',
+                    granted: true,
+                    ipAddress: 'USSD_GATEWAY'
                 }
-            } else {
-                response = `END Invalid Choice. Please try again.`;
-            }
-        }
-        else {
+            });
+            response = `END You have successfully opted into M-PESA Auto-Deductions. Your daily KES 30 SHIF contributions will now be added to your qualifying merchant payments.`;
+        } else if (level === 2 && textArray[1] === '1' && user.wallet?.autoDeductOptIn) {
+            // View daily ceiling
+            response = `END Your M-PESA Auto-Deduct daily ceiling is set to KES 30. This is the fixed daily SHIF contribution amount and cannot be modified.`;
+        } else if (level === 2 && (textArray[1] === '2' || textArray[1] === 'cancel')) {
+            // Cancel - return to main menu
+            response = `END Auto-Deduct setup cancelled. Returning to main menu.`;
+        } else {
             response = `END Invalid Choice. Please try again.`;
         }
-
-        res.set('Content-Type', 'text/plain');
-        res.send(response);
-
-    } catch (e: any) {
-        logger.error(`[USSD] Error processing session ${sessionId}: ${e.message}`);
-        response = `END We are experiencing technical difficulties. Please try again later.`;
-        res.set('Content-Type', 'text/plain');
-        res.send(response);
     }
+    else if (textArray[0] === '3') {
+        // Transaction History
+        const transactions = await prisma.autoDeductionLog.findMany({
+            where: { userId: user.id },
+            take: 5,
+            orderBy: { createdAt: 'desc' }
+        });
+
+        if (transactions.length === 0) {
+            response = `END You have no auto-deduction transactions. Enable auto-deduct to start contributing to SHIF.`;
+        } else {
+            let txString = `Your last 5 SHIF contributions:\n`;
+            transactions.forEach((tx, i) => {
+                txString += `${i+1}. KES ${tx.amount} - ${tx.createdAt.toLocaleDateString()}\n`;
+            });
+            txString += `Total contributed: KES ${transactions.reduce((sum, tx) => sum + tx.amount, 0)}`;
+            response = `END ${txString}`;
+        }
+    }
+    else if (textArray[0] === '4') {
+        // Help & Support
+        response = `END HealthToken Support:\nCall: 0700 123 456\nEmail: support@healthtoken.co.ke\nWebsite: www.healthtoken.co.ke\nSMS: HELP to 22233`;
+    }
+    else {
+        // Invalid main menu selection
+        response = mainMenuResponse;
+    }
+
+    return res.send(response);
 });
 
-export const ussdRouter = router;
-
+export default router;
