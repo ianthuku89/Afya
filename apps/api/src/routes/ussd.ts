@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { prisma } from '../lib/prisma.js';  // ✅ CORRECT IMPORT - matches all other files
+import { prisma } from '../lib/prisma';
 
-const router = Router();
+export const ussdRouter = Router();
 
 // USSD Entry Point - handles Safaricom USSD callbacks
-router.post('/ussd', async (req, res) => {
+ussdRouter.post('/ussd', async (req, res) => {
     const { sessionId, serviceCode, phoneNumber, text } = req.body;
     const msisdn = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber.replace(/^254/, '254')}`;
     
@@ -17,7 +17,7 @@ router.post('/ussd', async (req, res) => {
 
     // Initial request - main menu
     if (text === '') {
-        const user = await prisma.user.findUnique({
+        const user = await prisma.user.findFirst({
             where: { phoneNumber: msisdn },
             include: { wallet: true }
         });
@@ -30,7 +30,7 @@ router.post('/ussd', async (req, res) => {
     }
 
     // Get user for processing menu selections
-    const user = await prisma.user.findUnique({
+    const user = await prisma.user.findFirst({
         where: { phoneNumber: msisdn },
         include: { wallet: true }
     });
@@ -44,9 +44,9 @@ router.post('/ussd', async (req, res) => {
     // Main Menu Options
     if (textArray[0] === '1') {
         // My Wallet
-        const balance = user.wallet?.balance || 0;
+        const balance = user.wallet?.balanceAfya || 0;
         const autoDeduct = user.wallet?.autoDeductOptIn ? 'Enabled' : 'Disabled';
-        response = `END Your HealthToken Wallet Balance: KES ${balance}\nAuto-Deduct: ${autoDeduct}\nDaily SHIF Contributions: Processed with your first qualifying merchant payment.`;
+        response = `END Your HealthToken Wallet Balance: KES ${Number(balance)}\nAuto-Deduct: ${autoDeduct}\nDaily SHIF Contributions: Processed with your first qualifying merchant payment.`;
     } 
     else if (textArray[0] === '2') {
         // Auto-Deduct Settings - SINGLE PROMPT FLOW (your updated logic)
@@ -100,9 +100,9 @@ router.post('/ussd', async (req, res) => {
         } else {
             let txString = `Your last 5 SHIF contributions:\n`;
             transactions.forEach((tx, i) => {
-                txString += `${i+1}. KES ${tx.amount} - ${tx.createdAt.toLocaleDateString()}\n`;
+                txString += `${i+1}. KES ${Number(tx.deductedAmount)} - ${tx.createdAt.toLocaleDateString()}\n`;
             });
-            txString += `Total contributed: KES ${transactions.reduce((sum, tx) => sum + tx.amount, 0)}`;
+            txString += `Total contributed: KES ${transactions.reduce((sum, tx) => sum + Number(tx.deductedAmount), 0)}`;
             response = `END ${txString}`;
         }
     }
@@ -117,5 +117,3 @@ router.post('/ussd', async (req, res) => {
 
     return res.send(response);
 });
-
-export default router;
