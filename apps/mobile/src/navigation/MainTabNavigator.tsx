@@ -5,6 +5,7 @@ import HomeScreen from '../screens/Dashboard/HomeScreen';
 import ContributeScreen from '../screens/Dashboard/ContributeScreen';
 import AutoDeductScreen from '../screens/Dashboard/AutoDeductScreen';
 import TierBenefitsScreen from '../screens/Dashboard/TierBenefitsScreen';
+import PayMerchantScreen from '../screens/Dashboard/PayMerchantScreen';
 import CoverageScreen from '../screens/Dashboard/WalletScreen';
 import VisitHistoryScreen from '../screens/Activity/ClaimsScreen';
 import FacilitiesScreen from '../screens/Facilities/FacilitiesScreen';
@@ -85,6 +86,7 @@ export default function MainTabNavigator() {
       <Stack.Screen name="Contribute" component={ContributeScreen} />
       <Stack.Screen name="AutoDeduct" component={AutoDeductScreen} />
       <Stack.Screen name="TierBenefits" component={TierBenefitsScreen} />
+      <Stack.Screen name="PayMerchant" component={PayMerchantScreen} />
     </Stack.Navigator>
   );
 }

@@ -2,7 +2,10 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../lib/logger.js';
 import { authenticate } from '../middleware/auth.js';
-import { initiateSHIFDeduction, initiateDarajaStkPush } from '../controllers/payment.controller.js';
+import {
+    initiateSHIFDeduction,
+    getShifSummary,
+} from '../controllers/payment.controller.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -84,32 +87,28 @@ router.get('/auto-deduct/status', async (req, res) => {
 
         const wallet = await prisma.wallet.findUnique({
             where: { userId },
-            include: { user: { select: { nationalId: true } } },
+            select: { autoDeductOptIn: true, pendingDeductionKES: true },
         });
 
         if (!wallet) return res.status(404).json({ success: false, message: 'Wallet not found.' });
 
-        const { alreadyDeducted, totalDeductedToday, todayLogs } = await getTodayDeductionStatus(userId);
+        // Built from confirmed Transaction rows (merchant + SHIF and standalone SHIF),
+        // so it reflects the single-prompt merchant flow.
+        const summary = await getShifSummary(userId);
 
         res.json({
             success: true,
             data: {
                 autoDeductOptIn: wallet.autoDeductOptIn,
                 pendingDeductionKES: Number(wallet.pendingDeductionKES),
-                todayDeductedKES: totalDeductedToday,
+                todayDeductedKES: summary.todayDeductedKES,
                 dailyLimitKES: DAILY_SHIF_DEDUCTION,
-                isDeductedToday: alreadyDeducted,
+                isDeductedToday: summary.isDeductedToday,
                 minQualifyingTxKES: MIN_QUALIFYING_MERCHANT_TX,
                 shaPaybill: SHA_SHIF_PAYBILL,
-                shaAccountNumber: wallet.user?.nationalId || 'National ID',
-                recentLogs: todayLogs.slice(0, 5).map((log) => ({
-                    id: log.id,
-                    tx: log.originalTxId,
-                    originalAmt: Number(log.originalAmount),
-                    deducted: Number(log.deductedAmount),
-                    date: log.createdAt.toISOString(),
-                    status: log.status,
-                })),
+                // Never send the (encrypted) national ID to the client; the screen only needs the label
+                shaAccountNumber: 'National ID',
+                recentLogs: summary.recentLogs,
             }
         });
     } catch (e: any) {

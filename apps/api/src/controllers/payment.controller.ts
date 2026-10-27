@@ -34,9 +34,9 @@ const stkPushSchema = z.object({
 const merchantPaySchema = z.object({
     merchantAmount: z.number().int().min(1).max(150000),
     merchantPaybill: z.string().regex(/^\d{5,7}$/),
-    merchantAccount: z.string().max(20).optional(),
+    merchantAccount: z.string().min(1).max(13),          
     merchantName: z.string().max(60).optional(),
-    includeShif: z.boolean().default(true),
+    includeShif: z.boolean().optional(),                 
     phone: z.string().optional(),
 });
 
@@ -301,7 +301,7 @@ async function disburseToMerchant(tx: {
             Amount: tx.merchantAmountKES,
             PartyA: process.env.DARAJA_SHORTCODE,
             PartyB: tx.merchantPaybill,
-            AccountReference: (tx.merchantAccount || 'AFYA').slice(0, 12),
+            AccountReference: (tx.merchantAccount || 'AFYA').slice(0, 13),
             Remarks: 'Merchant payment',
             QueueTimeOutURL: `${base}/b2b-timeout/${secret}/${tx.id}`,
             ResultURL: `${base}/b2b-result/${secret}/${tx.id}`,
@@ -675,6 +675,53 @@ export async function initiateSHIFDeduction(userId: string, triggerTxRef: string
  *   • shifAmount (KES 30) is settled to the SHA paybill
  * The server computes the SHIF amount itself and never trusts the client.
  */
+export const startOfEatDay = () =>
+    new Date(eatDayNumber(new Date()) * 86_400_000 - 3 * 60 * 60 * 1000);
+
+export async function userOptedIn(userId: string): Promise<boolean> {
+    const w = await prisma.wallet.findUnique({ where: { userId }, select: { autoDeductOptIn: true } });
+    return Boolean(w?.autoDeductOptIn);
+}
+
+export async function shifDoneOrInFlightToday(userId: string): Promise<boolean> {
+    const n = await prisma.transaction.count({
+        where: {
+            wallet: { userId },
+            createdAt: { gte: startOfEatDay() },
+            status: { in: ['PENDING', 'PROCESSING', 'CONFIRMED'] },
+            OR: [{ source: 'MERCHANT', shifAmountKES: { gt: 0 } }, { source: 'AUTO_DEDUCT' }],
+        },
+    });
+    return n > 0;
+}
+
+export async function getShifSummary(userId: string) {
+    const start = startOfEatDay();
+    const rows = await prisma.transaction.findMany({
+        where: {
+            wallet: { userId },
+            status: 'CONFIRMED',
+            OR: [{ source: 'MERCHANT', shifAmountKES: { gt: 0 } }, { source: 'AUTO_DEDUCT' }],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+    });
+    const logs = rows.map((r) => ({
+        id: r.id,
+        tx: r.mpesaReceipt ?? r.merchantName ?? 'Merchant payment',
+        originalAmt: r.merchantAmountKES ?? 0,
+        deducted: r.source === 'MERCHANT' ? r.shifAmountKES ?? 0 : r.amountKES ?? 0,
+        date: r.createdAt.toISOString(),
+        status: 'PROCESSED',
+        isToday: r.createdAt >= start,
+    }));
+    return {
+        isDeductedToday: logs.some((l) => l.isToday),
+        todayDeductedKES: logs.filter((l) => l.isToday).reduce((s, l) => s + l.deducted, 0),
+        recentLogs: logs.slice(0, 5),
+    };
+}
+
 export async function initiateMerchantPayment(userId: string, p: z.infer<typeof merchantPaySchema>) {
     const simulate = !darajaConfigured();
     if (simulate) assertCanSimulate(); // throws in production
@@ -688,7 +735,12 @@ export async function initiateMerchantPayment(userId: string, p: z.infer<typeof 
     const phoneNumber = normalizeMsisdn(p.phone) || normalizeMsisdn(readPii(user?.phoneNumber));
     if (!phoneNumber) throw new Error('A valid Safaricom phone number is required');
 
-    const shifAmount = p.includeShif && p.merchantAmount > SHIF_THRESHOLD_KES ? DAILY_SHIF_DEDUCTION : 0;
+    const eligible =
+            p.includeShif !== false &&
+            p.merchantAmount > SHIF_THRESHOLD_KES &&
+            (await userOptedIn(userId)) &&
+            !(await shifDoneOrInFlightToday(userId));
+    const shifAmount = eligible ? DAILY_SHIF_DEDUCTION : 0;
     const total = p.merchantAmount + shifAmount;
 
     const shortCode = process.env.DARAJA_SHORTCODE || '174379';
