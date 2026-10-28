@@ -18,7 +18,9 @@
     "type-check": "turbo run type-check",
     "clean": "turbo run clean && rimraf node_modules",
     "prod": "turbo run build && turbo run start",
-    "vercel-build": "turbo run build --filter=./apps/web... --filter=./apps/internal... --filter=./apps/seaboard... --filter=./apps/api..."
+    "vercel-build": "turbo run build --filter=./apps/web... --filter=./apps/internal... --filter=./apps/seaboard... --filter=./apps/api...",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
@@ -31,7 +33,11 @@
     "npm": ">=10.0.0"
   },
   "dependencies": {
+    "expo": "~50.0.17",
     "expo-linear-gradient": "~12.7.2",
+    "expo-splash-screen": "~0.26.5",
+    "react": "18.2.0",
+    "react-native": "0.73.6",
     "react-native-safe-area-context": "4.8.2"
   }
 }

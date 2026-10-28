@@ -3,13 +3,23 @@
     "name": "AfyaToken Mobile",
     "slug": "afyaToken-mobile",
     "entryPoint": "./apps/mobile/index.js",
+    "icon": "./apps/mobile/assets/icon.png",
+    "splash": {
+      "image": "./apps/mobile/assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "extra": {
       "eas": {
         "projectId": "3fe08865-1867-475c-9be7-21ac549e848a"
       }
     },
     "android": {
-      "package": "com.seaboard.healthtoken"
+      "package": "com.seaboard.healthtoken",
+      "adaptiveIcon": {
+        "foregroundImage": "./apps/mobile/assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
     },
     "ios": {
       "bundleIdentifier": "com.seaboard.healthtoken"
