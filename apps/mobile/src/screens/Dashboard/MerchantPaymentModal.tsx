@@ -13,12 +13,25 @@ interface MerchantPaymentModalProps {
   onSuccess?: (details: { merchantAmount: number; shifDeducted: boolean }) => void;
 }
 
-const SHIF_AMOUNT = 30;
-const SHIF_THRESHOLD = 100;
+type QuoteReason = 'APPLIES' | 'BELOW_THRESHOLD' | 'NOT_OPTED_IN' | 'ALREADY_PAID_TODAY' | 'DECLINED';
+type Quote = {
+  merchantAmountKES: number;
+  shifAmountKES: number;
+  totalKES: number;
+  reason: QuoteReason;
+};
+
 const POLL_INTERVAL_MS = 3000;
 const POLL_MAX_ATTEMPTS = 20; // ~60 seconds
 
 type PollResult = 'SUCCESS' | 'FAILED' | 'TIMEOUT';
+
+const NO_SHIF_MESSAGE: Record<Exclude<QuoteReason, 'APPLIES'>, string> = {
+  BELOW_THRESHOLD: 'Payments of KES 100 or below don’t include a SHIF contribution.',
+  NOT_OPTED_IN: 'No SHIF contribution will be added because Auto-Deduct is turned off.',
+  ALREADY_PAID_TODAY: 'No SHIF contribution will be added: today’s contribution is already done.',
+  DECLINED: 'No SHIF contribution will be added.',
+};
 
 export default function MerchantPaymentModal({
   visible,
@@ -32,8 +45,9 @@ export default function MerchantPaymentModal({
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'preview' | 'processing' | 'completed'>('preview');
   const [statusMessage, setStatusMessage] = useState('');
-  const [shifEligible, setShifEligible] = useState(false);
-  const [eligibilityLoaded, setEligibilityLoaded] = useState(false);
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoteError, setQuoteError] = useState(false);
+  const [quoteNonce, setQuoteNonce] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = () => {
@@ -45,29 +59,30 @@ export default function MerchantPaymentModal({
 
   useEffect(() => stopPolling, []);
 
-  // Preview only. The server re-checks opt-in + daily cap and decides the real SHIF amount.
+  // The SERVER decides what is charged. We only display its numbers.
+  // If the quote fails we block payment rather than guess.
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
-    setEligibilityLoaded(false);
+    setQuote(null);
+    setQuoteError(false);
     (async () => {
       try {
-        const res = await client.get('/loyalty/auto-deduct/status');
-        const { autoDeductOptIn, isDeductedToday } = res.data.data;
-        if (!cancelled) setShifEligible(Boolean(autoDeductOptIn) && !isDeductedToday);
+        const res = await client.post('/payment/merchant/quote', { merchantAmount });
+        if (!cancelled) setQuote(res.data.data as Quote);
       } catch {
-        if (!cancelled) setShifEligible(false);
-      } finally {
-        if (!cancelled) setEligibilityLoaded(true);
+        if (!cancelled) setQuoteError(true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [visible]);
+  }, [visible, merchantAmount, quoteNonce]);
 
-  const isQualifying = shifEligible && merchantAmount > SHIF_THRESHOLD;
-  const totalAmount = isQualifying ? merchantAmount + SHIF_AMOUNT : merchantAmount;
+  const quoteReady = quote !== null;
+  const shifAmount = quote?.shifAmountKES ?? 0;
+  const isQualifying = shifAmount > 0;
+  const totalAmount = quote?.totalKES ?? merchantAmount;
 
   const waitForPayment = (checkoutRequestId: string) =>
     new Promise<PollResult>((resolve) => {
@@ -94,20 +109,19 @@ export default function MerchantPaymentModal({
     });
 
   const handlePay = async () => {
-    if (loading || !eligibilityLoaded) return;
+    if (loading || !quoteReady) return;
     setLoading(true);
     setStep('processing');
     setStatusMessage(`Sending M-PESA prompt for KES ${totalAmount}...`);
 
     try {
-      // Correct endpoint: the merchant route, NOT /payment/stkpush (that one is the
-      // direct-contribution route and would treat the whole total as a wallet top-up).
+      // Merchant route (NOT /payment/stkpush, which is the direct-contribution route).
+      // The server recomputes the SHIF amount itself, so nothing about SHIF is sent.
       const res = await client.post('/payment/merchant/stk-push', {
         merchantAmount,
         merchantPaybill,
         merchantAccount,
         merchantName,
-        includeShif: isQualifying,
       });
 
       const data = res.data?.data;
@@ -116,7 +130,7 @@ export default function MerchantPaymentModal({
 
       // Trust the server's numbers for what the customer is actually charged
       const serverTotal: number = data.total ?? totalAmount;
-      const serverShif: number = data.shifAmount ?? (isQualifying ? SHIF_AMOUNT : 0);
+      const serverShif: number = data.shifAmount ?? shifAmount;
 
       setStatusMessage(`Enter your M-PESA PIN on your phone to pay KES ${serverTotal}...`);
       const result = await waitForPayment(checkoutRequestId);
@@ -131,6 +145,7 @@ export default function MerchantPaymentModal({
         onSuccess?.({ merchantAmount, shifDeducted: serverShif > 0 });
       } else {
         setStep('preview');
+        setQuoteNonce((n) => n + 1); // refresh: today's SHIF status may have changed
         Alert.alert(
           result === 'FAILED' ? 'Payment failed' : 'No confirmation yet',
           result === 'FAILED'
@@ -140,6 +155,7 @@ export default function MerchantPaymentModal({
       }
     } catch (e: any) {
       setStep('preview');
+      setQuoteNonce((n) => n + 1);
       Alert.alert(
         'Payment failed',
         e.response?.data?.error || e.message || 'Could not start the M-PESA payment.'
@@ -190,27 +206,38 @@ export default function MerchantPaymentModal({
 
           {step === 'preview' && (
             <>
-              {isQualifying ? (
+              {quoteError ? (
+                <View className="bg-red-950/60 border border-red-500/30 rounded-2xl p-4 mb-4">
+                  <Text className="text-red-300 text-sm font-bold mb-1">
+                    Couldn’t load your payment details
+                  </Text>
+                  <Text className="text-slate-300 text-xs mb-3">
+                    Check your connection and try again. You have not been charged.
+                  </Text>
+                  <TouchableOpacity
+                    className="bg-white/10 rounded-xl py-2 items-center"
+                    onPress={() => setQuoteNonce((n) => n + 1)}
+                  >
+                    <Text className="text-white font-bold text-sm">Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : isQualifying ? (
                 <View className="bg-teal-950/60 border border-teal-500/30 rounded-2xl p-4 mb-4">
                   <View className="flex-row items-center gap-2 mb-1">
                     <Feather name="shield" size={16} color="#34D399" />
                     <Text className="text-teal-400 font-bold text-sm">Smart SHIF Auto-Deduct Active</Text>
                   </View>
                   <Text className="text-slate-300 text-xs leading-relaxed">
-                    Your first payment over KES {SHIF_THRESHOLD} each day includes a KES {SHIF_AMOUNT} SHIF
-                    contribution. The M-PESA prompt will show the combined total of{' '}
+                    KES {merchantAmount} goes to {merchantName} and KES {shifAmount} goes to your SHIF
+                    healthcare cover. The M-PESA prompt will show the combined total of{' '}
                     <Text className="text-white font-bold">KES {totalAmount}</Text>.
                   </Text>
                 </View>
-              ) : (
+              ) : quoteReady && quote && quote.reason !== 'APPLIES' ? (
                 <View className="bg-slate-800/80 border border-slate-700 rounded-2xl p-4 mb-4">
-                  <Text className="text-slate-300 text-xs">
-                    {merchantAmount <= SHIF_THRESHOLD
-                      ? `Payments of KES ${SHIF_THRESHOLD} or below don't include a SHIF contribution.`
-                      : 'No SHIF contribution will be added (Auto-Deduct is off, or today’s contribution is already done).'}
-                  </Text>
+                  <Text className="text-slate-300 text-xs">{NO_SHIF_MESSAGE[quote.reason]}</Text>
                 </View>
-              )}
+              ) : null}
 
               <View className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-5">
                 <Text className="text-slate-400 text-xs font-bold mb-3">PAYMENT BREAKDOWN</Text>
@@ -235,23 +262,31 @@ export default function MerchantPaymentModal({
                       <Text className="text-teal-300 font-medium text-sm">SHIF Healthcare Cover</Text>
                       <Text className="text-slate-500 text-xs">Paybill 200222 (SHA)</Text>
                     </View>
-                    <Text className="text-teal-300 font-bold text-base">KES {SHIF_AMOUNT}</Text>
+                    <Text className="text-teal-300 font-bold text-base">KES {shifAmount}</Text>
                   </View>
                 )}
 
                 <View className="flex-row justify-between items-center pt-3 mt-1 border-t border-white/10">
                   <Text className="text-white font-bold">TOTAL TO PAY</Text>
-                  <Text className="text-white font-bold text-xl">KES {totalAmount}</Text>
+                  {quoteReady ? (
+                    <Text className="text-white font-bold text-xl">KES {totalAmount}</Text>
+                  ) : (
+                    <Text className="text-slate-500 font-bold text-xl">{quoteError ? '—' : '...'}</Text>
+                  )}
                 </View>
               </View>
 
               <TouchableOpacity
-                className={`rounded-2xl py-4 items-center ${eligibilityLoaded ? 'bg-teal-500' : 'bg-slate-700'}`}
+                className={`rounded-2xl py-4 items-center ${quoteReady ? 'bg-teal-500' : 'bg-slate-700'}`}
                 onPress={handlePay}
-                disabled={loading || !eligibilityLoaded}
+                disabled={loading || !quoteReady}
               >
                 <Text className="text-white font-bold text-base">
-                  {eligibilityLoaded ? `Pay KES ${totalAmount} with M-PESA` : 'Checking...'}
+                  {quoteReady
+                    ? `Pay KES ${totalAmount} with M-PESA`
+                    : quoteError
+                      ? 'Unavailable'
+                      : 'Checking...'}
                 </Text>
               </TouchableOpacity>
             </>

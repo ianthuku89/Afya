@@ -34,10 +34,14 @@ const stkPushSchema = z.object({
 const merchantPaySchema = z.object({
     merchantAmount: z.number().int().min(1).max(150000),
     merchantPaybill: z.string().regex(/^\d{5,7}$/),
-    merchantAccount: z.string().min(1).max(13),          
+    merchantAccount: z.string().min(1).max(13),
     merchantName: z.string().max(60).optional(),
-    includeShif: z.boolean().optional(),                 
+    includeShif: z.boolean().optional(),
     phone: z.string().optional(),
+});
+
+const merchantQuoteSchema = z.object({
+    merchantAmount: z.number().int().min(1).max(150000),
 });
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -349,8 +353,8 @@ export async function retryMerchantDisbursement(txId: string) {
 }
 
 /**
- * Safety net (call from a cron every few minutes): confirmed merchant payments whose
- * disbursement never started, e.g. the server crashed right after confirmation.
+ * Safety net (scheduled from server.ts every few minutes): confirmed merchant payments
+ * whose disbursement never started, e.g. the server crashed right after confirmation.
  */
 export async function disbursePendingMerchantSettlements() {
     const stuck = await prisma.transaction.findMany({
@@ -722,6 +726,34 @@ export async function getShifSummary(userId: string) {
     };
 }
 
+export type MerchantQuoteReason =
+    | 'APPLIES'
+    | 'BELOW_THRESHOLD'
+    | 'NOT_OPTED_IN'
+    | 'ALREADY_PAID_TODAY'
+    | 'DECLINED';
+
+/**
+ * Single source of truth for what a merchant payment costs. Used by BOTH the quote
+ * endpoint (what the app displays) and initiateMerchantPayment (what is charged),
+ * so the two can never disagree.
+ */
+export async function computeMerchantQuote(userId: string, merchantAmount: number, includeShif?: boolean) {
+    let reason: MerchantQuoteReason = 'APPLIES';
+    if (includeShif === false) reason = 'DECLINED';
+    else if (merchantAmount <= SHIF_THRESHOLD_KES) reason = 'BELOW_THRESHOLD';
+    else if (!(await userOptedIn(userId))) reason = 'NOT_OPTED_IN';
+    else if (await shifDoneOrInFlightToday(userId)) reason = 'ALREADY_PAID_TODAY';
+
+    const shifAmountKES = reason === 'APPLIES' ? DAILY_SHIF_DEDUCTION : 0;
+    return {
+        merchantAmountKES: merchantAmount,
+        shifAmountKES,
+        totalKES: merchantAmount + shifAmountKES,
+        reason,
+    };
+}
+
 export async function initiateMerchantPayment(userId: string, p: z.infer<typeof merchantPaySchema>) {
     const simulate = !darajaConfigured();
     if (simulate) assertCanSimulate(); // throws in production
@@ -735,13 +767,9 @@ export async function initiateMerchantPayment(userId: string, p: z.infer<typeof 
     const phoneNumber = normalizeMsisdn(p.phone) || normalizeMsisdn(readPii(user?.phoneNumber));
     if (!phoneNumber) throw new Error('A valid Safaricom phone number is required');
 
-    const eligible =
-            p.includeShif !== false &&
-            p.merchantAmount > SHIF_THRESHOLD_KES &&
-            (await userOptedIn(userId)) &&
-            !(await shifDoneOrInFlightToday(userId));
-    const shifAmount = eligible ? DAILY_SHIF_DEDUCTION : 0;
-    const total = p.merchantAmount + shifAmount;
+    const quote = await computeMerchantQuote(userId, p.merchantAmount, p.includeShif);
+    const shifAmount = quote.shifAmountKES;
+    const total = quote.totalKES;
 
     const shortCode = process.env.DARAJA_SHORTCODE || '174379';
     const tx = await createPendingDarajaTransaction(wallet.id, phoneNumber, shortCode, 'MERCHANT', total, {
@@ -1035,6 +1063,25 @@ export const paymentController = {
         } catch (error) {
             logger.error('SHIF STK Push Error:', error);
             return res.status(500).json({ success: false, error: 'SHIF payment initialization failed' });
+        }
+    },
+
+    // Route: POST /payment/merchant/quote  (auth required)
+    // Returns exactly what the customer will be charged, without creating a transaction.
+    quoteMerchantPayment: async (req: Request, res: Response) => {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+            const { merchantAmount } = merchantQuoteSchema.parse(req.body);
+            const quote = await computeMerchantQuote(userId, merchantAmount);
+            return res.status(200).json({ success: true, data: quote });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                return res.status(400).json({ success: false, error: error.errors });
+            }
+            logger.error('Merchant quote error:', error);
+            return res.status(500).json({ success: false, error: 'Could not get payment quote' });
         }
     },
 

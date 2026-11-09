@@ -233,7 +233,7 @@ export default function AutoDeductScreen() {
                     <View className="flex-row items-center gap-3">
                         <Feather name="send" size={20} color="white" />
                         <View>
-                            <Text className="text-white font-bold text-sm">Pay a Paybill</Text>
+                            <Text className="text-white font-bold text-sm">Pay via Paybill</Text>
                             <Text className="text-teal-100 text-xs">Enter paybill, account and amount</Text>
                         </View>
                     </View>
