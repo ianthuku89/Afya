@@ -297,32 +297,25 @@ enum AIRecommendation {
   BLOCK
 }
 
+// ─── FACILITY ─────────────────────────────────────────────────────────────────
+// DHA: Connected to DHA Facility Registry via mflCode
 model Facility {
-  id                String         @id @default(uuid())
-  mflCode           String         @unique
+  id                String        @id @default(uuid())
+  mflCode           String        @unique // Ministry of Health Facility Code
   name              String
-  level             FacilityLevel? // was required; null until DHA/KMHFL supplies it
+  level             FacilityLevel
   county            String
-  subCounty         String?        // was required
-  latitude          Float?         // was required
-  longitude         Float?         // was required
-  walletAddress     String?        @unique // was required; Postgres allows multiple NULLs
-  isAccredited      Boolean        @default(false)
-  fhirEnabled       Boolean        @default(false)
-  shaRegistrationNo String?        @unique // was required
-  contactPhone      String?        // was required
-  userId            String?        @unique
-
-  // ── DHA registry fields (new) ──
-  dhaUuid           String?
-  frCode            String?
-  shaContractStatus String?
-  shaContractEnd    DateTime?
-  shaServices       String[]       @default([])
-  lastSyncedAt      DateTime?
-
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  subCounty         String
+  latitude          Float
+  longitude         Float
+  walletAddress     String        @unique
+  isAccredited      Boolean       @default(false)
+  fhirEnabled       Boolean       @default(false)
+  shaRegistrationNo String        @unique
+  contactPhone      String
+  userId            String?       @unique // Facility user account
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   claims                Claim[]                @relation("FacilityClaims")
   user                  User?                  @relation(fields: [userId], references: [id])
@@ -330,7 +323,6 @@ model Facility {
 
   @@index([county])
   @@index([isAccredited])
-  @@index([latitude, longitude])
   @@map("facilities")
 }
 
