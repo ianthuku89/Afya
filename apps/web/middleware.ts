@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 export default withAuth(
     function middleware(req) {
         const token = req.nextauth.token;
-        const path = req.nextUrl.pathname;
+        const path = new URL(req.url).pathname;
 
         // Must be logged in
         if (!token) return NextResponse.redirect(new URL("/auth/signin", req.url));
