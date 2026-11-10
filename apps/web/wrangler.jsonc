@@ -8,6 +8,9 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  "vars": {
+    "NEXTAUTH_URL": "https://afya.thuku0249.workers.dev"
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
