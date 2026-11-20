@@ -220,6 +220,9 @@ export default function ContributeScreen() {
         visible={merchantModalVisible}
         onClose={() => setMerchantModalVisible(false)}
         merchantAmount={amount}
+        merchantName="Test Merchant"
+        merchantPaybill="174379"
+        merchantAccount="TEST"
         onSuccess={handleMerchantSuccess}
       />
     </SafeAreaView>

@@ -1,5 +1,9 @@
 module.exports = ({ config }) => ({
   ...config,
+  plugins: [
+    ...(config.plugins || []),
+    'expo-font',
+  ],
   android: {
     ...config.android,
     // versionCode removed: EAS manages it (remote version source)

@@ -76,11 +76,11 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-900">
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={{ padding: 20, paddingBottom: 60 }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchData} tintColor="#00C165" />}
       >
-        
+
         {/* Header */}
         <View className="flex-row justify-between items-center mb-6">
           <View>
@@ -154,27 +154,28 @@ export default function HomeScreen() {
             </View>
           </View>
 
-        {/* Action Buttons */}
-        <View className="flex-row gap-3 mb-3">
+          {/* Action Buttons */}
+          <View className="flex-row gap-3 mb-3">
+            <TouchableOpacity
+              className="flex-1 bg-teal-500 rounded-xl py-3 items-center"
+              onPress={() => navigation.navigate('Contribute' as never)}
+            >
+              <Text className="text-white font-bold tracking-wide">+ Contribute KES 30</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="flex-1 bg-amber-500/90 rounded-xl py-3 flex-row items-center justify-center gap-1.5"
+              onPress={() => navigation.navigate('Sambaza' as never)}
+            >
+              <Feather name="users" size={14} color="white" />
+              <Text className="text-white font-bold tracking-wide">Sambaza</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
-            className="flex-1 bg-teal-500 rounded-xl py-3 items-center"
-            onPress={() => navigation.navigate('Contribute' as never)}
+            className="bg-white/10 rounded-xl py-3 items-center border border-white/20"
+            onPress={() => navigation.navigate('TierBenefits' as never)}
           >
-            <Text className="text-white font-bold tracking-wide">+ Contribute KES 30</Text>
+            <Text className="text-white/90 font-bold tracking-wide">View Packages</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            className="flex-1 bg-amber-500/90 rounded-xl py-3 flex-row items-center justify-center gap-1.5"
-            onPress={() => navigation.navigate('Sambaza' as never)}
-          >
-            <Feather name="users" size={14} color="white" />
-            <Text className="text-white font-bold tracking-wide">Sambaza</Text>
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity
-          className="bg-white/10 rounded-xl py-3 items-center border border-white/20"
-          onPress={() => navigation.navigate('TierBenefits' as never)}
-        >
-          <Text className="text-white/90 font-bold tracking-wide">View Packages</Text>
         </TouchableOpacity>
 
         {/* Quick Stats Grid */}
@@ -204,8 +205,8 @@ export default function HomeScreen() {
         </View>
 
         {/* Auto-Deduct Banner */}
-        <TouchableOpacity 
-          className="bg-gradient-to-r from-teal-950 to-slate-800 border border-teal-500/30 rounded-2xl p-5 mb-4 shadow-lg shadow-teal-900/20"
+        <TouchableOpacity
+          className="bg-teal-950 border border-teal-500/30 rounded-2xl p-5 mb-4"
           onPress={() => navigation.navigate('AutoDeduct' as never)}
         >
           <View className="flex-row items-center gap-4">
@@ -224,7 +225,7 @@ export default function HomeScreen() {
 
         {/* Tier Benefits Preview */}
         {afyaData?.perks && (
-          <TouchableOpacity 
+          <TouchableOpacity
             className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4"
             onPress={() => navigation.navigate('TierBenefits' as never)}
             activeOpacity={0.8}
