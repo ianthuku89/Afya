@@ -154,21 +154,27 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Action Buttons */}
-          <View className="flex-row gap-3">
-            <TouchableOpacity 
-              className="flex-1 bg-teal-500 rounded-xl py-3 items-center"
-              onPress={() => navigation.navigate('Contribute' as never)}
-            >
-              <Text className="text-white font-bold tracking-wide">+ Contribute KES 30</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="flex-1 bg-white/10 rounded-xl py-3 items-center border border-white/20"
-              onPress={() => navigation.navigate('TierBenefits' as never)}
-            >
-              <Text className="text-white/90 font-bold tracking-wide">View Packages</Text>
-            </TouchableOpacity>
-          </View>
+        {/* Action Buttons */}
+        <View className="flex-row gap-3 mb-3">
+          <TouchableOpacity
+            className="flex-1 bg-teal-500 rounded-xl py-3 items-center"
+            onPress={() => navigation.navigate('Contribute' as never)}
+          >
+            <Text className="text-white font-bold tracking-wide">+ Contribute KES 30</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className="flex-1 bg-amber-500/90 rounded-xl py-3 flex-row items-center justify-center gap-1.5"
+            onPress={() => navigation.navigate('Sambaza' as never)}
+          >
+            <Feather name="users" size={14} color="white" />
+            <Text className="text-white font-bold tracking-wide">Sambaza</Text>
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity
+          className="bg-white/10 rounded-xl py-3 items-center border border-white/20"
+          onPress={() => navigation.navigate('TierBenefits' as never)}
+        >
+          <Text className="text-white/90 font-bold tracking-wide">View Packages</Text>
         </TouchableOpacity>
 
         {/* Quick Stats Grid */}

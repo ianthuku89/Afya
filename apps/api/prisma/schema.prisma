@@ -44,7 +44,13 @@ model User {
   coverageVerifications CoverageVerification[] @relation("PatientVerifications")
   AutoDeductionLog      AutoDeductionLog[]
   deductionRevenues     DeductionRevenue[]
+  phoneHash             String?                @unique // keyed hash of the normalised phone; phoneNumber is encrypted so it cannot be queried
+  beneficiaries         Beneficiary[]          @relation("OwnedBeneficiaries")
+  beneficiaryOf         Beneficiary[]          @relation("BeneficiaryOf")
+  sambazaSent           Transaction[]          @relation("SambazaSender")
+  sambazaReceived       Transaction[]          @relation("SambazaRecipient")
 
+  @@index([phoneHash])
   @@index([email])
   @@index([shaId])
   @@map("users")
@@ -173,6 +179,14 @@ model Transaction {
   settlementRef     String? // B2B ConversationID
   settlementDesc    String? // B2B result description (for support / retries)
 
+  // Sambaza: walletId is the RECIPIENT's wallet; the sender is recorded here
+  senderUserId    String?
+  recipientUserId String?
+  sender          User?   @relation("SambazaSender", fields: [senderUserId], references: [id])
+  recipient       User?   @relation("SambazaRecipient", fields: [recipientUserId], references: [id])
+
+  @@index([senderUserId, createdAt])
+  @@index([recipientUserId])
   @@index([txHash])
   @@index([walletId])
   @@index([status])
@@ -198,6 +212,7 @@ enum ContributionSource {
   CHALLENGE_BONUS // AfyaScore challenge reward
   GOV_MATCH // Government match top-up
   CHAMA_BOOST // Chama rotating boost (Phase C)
+  SAMBAZA // Contribution paid by one user for another user's SHIF cover
 }
 
 // Disbursement of the merchant portion after the customer's STK is confirmed
@@ -551,4 +566,26 @@ enum InvoiceStatus {
   DRAFT
   SENT_TO_SHA
   PAID
+}
+
+enum BeneficiaryRelation {
+  FAMILY
+  FRIEND
+}
+
+model Beneficiary {
+  id                String              @id @default(uuid())
+  ownerId           String
+  beneficiaryUserId String
+  nickname          String
+  relation          BeneficiaryRelation
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  owner       User @relation("OwnedBeneficiaries", fields: [ownerId], references: [id], onDelete: Cascade)
+  beneficiary User @relation("BeneficiaryOf", fields: [beneficiaryUserId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, beneficiaryUserId])
+  @@index([ownerId])
+  @@map("beneficiaries")
 }

@@ -11,6 +11,7 @@ import VisitHistoryScreen from '../screens/Activity/ClaimsScreen';
 import FacilitiesScreen from '../screens/Facilities/FacilitiesScreen';
 import ProfileScreen from '../screens/Profile/ProfileScreen';
 import { Feather } from '@expo/vector-icons';
+import SambazaScreen from '../screens/Dashboard/SambazaScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -86,6 +87,7 @@ export default function MainTabNavigator() {
       <Stack.Screen name="Contribute" component={ContributeScreen} />
       <Stack.Screen name="AutoDeduct" component={AutoDeductScreen} />
       <Stack.Screen name="TierBenefits" component={TierBenefitsScreen} />
+      <Stack.Screen name="Sambaza" component={SambazaScreen} options={{ headerShown: false }} />
       <Stack.Screen name="PayMerchant" component={PayMerchantScreen} />
     </Stack.Navigator>
   );

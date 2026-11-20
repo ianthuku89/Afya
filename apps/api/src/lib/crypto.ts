@@ -1,4 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
+import { createHmac } from 'crypto';
+
 
 // ─── AES-256-GCM Encryption (OWASP A02, DHA health data at rest) ──────────────
 // Security rationale: AES-256-GCM provides authenticated encryption —
@@ -69,5 +71,38 @@ export function safeEqual(a: string, b: string): boolean {
         mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
     }
     return mismatch === 0;
+}
+
+
+
+/** 0712345678 | 712345678 | 254712345678 | +254712345678  ->  +254712345678 (null if invalid) */
+export function normalizeKenyanPhone(input: string): string | null {
+    const digits = input.replace(/[^\d]/g, '');
+    let national: string;
+    if (digits.startsWith('254') && digits.length === 12) national = digits.slice(3);
+    else if (digits.startsWith('0') && digits.length === 10) national = digits.slice(1);
+    else if (digits.length === 9) national = digits;
+    else return null;
+    if (!/^[71]\d{8}$/.test(national)) return null; // Safaricom/Airtel 07xx and 01xx ranges
+    return `+254${national}`;
+}
+
+/** Deterministic, keyed hash so we can look users up without storing the plaintext phone. */
+export function hashPhone(normalizedPhone: string): string {
+    const key = process.env.PHONE_HASH_KEY;
+    if (!key) throw new Error('PHONE_HASH_KEY is not set');
+    return createHmac('sha256', key).update(normalizedPhone).digest('hex');
+}
+
+/** +254712345678 -> +254 7•• ••• 678 */
+export function maskPhone(normalizedPhone: string): string {
+    return `${normalizedPhone.slice(0, 4)} ${normalizedPhone[4]}•• ••• ${normalizedPhone.slice(-3)}`;
+}
+
+/** "Jane Wanjiku Kamau" -> "Jane K." */
+export function maskName(fullName: string): string {
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0];
+    return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
 }
 

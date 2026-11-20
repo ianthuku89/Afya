@@ -22,6 +22,7 @@ import { internalAuthRouter } from './routes/internal/auth.js';
 import { internalFinanceRouter } from './routes/internal/finance.js';
 import { auditMiddleware } from './middleware/audit.js';
 import { logger } from './lib/logger.js';
+import { sambazaRouter } from './routes/sambaza.js';
 
 export function createApp(): Application {
     const app = express();
@@ -112,6 +113,15 @@ export function createApp(): Application {
         legacyHeaders: false,
     });
 
+    const sambazaLookupLimiter = rateLimit({
+        windowMs: 3_600_000,
+        max: 30,
+        keyGenerator: (req) => (req.headers.authorization as string) || req.ip || 'unknown',
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: { success: false, error: { code: 'RATE_LIMIT', message: 'Too many Sambaza lookups' } },
+    });
+
     const authLimiter = rateLimit({
         windowMs: 900_000,      // 15 minutes
         max: 10,                // Max 10 login attempts per 15 min: brute-force protection
@@ -121,6 +131,7 @@ export function createApp(): Application {
     app.use('/api/v1/auth', authLimiter);
     app.use('/api/v1/fhir', facilityLimiter);
     app.use('/api/v1/payment/status', paymentStatusLimiter);
+    app.use('/api/v1/sambaza/lookup', sambazaLookupLimiter);
     app.use('/api/v1', publicLimiter);
 
     // ── BODY PARSING ─────────────────────────────────────────────────────────
@@ -152,6 +163,7 @@ export function createApp(): Application {
     app.use('/api/v1/afyascore', afyaScoreRouter);
     app.use('/api/v1/coverage', coverageRouter);
     app.use('/api/v1/loyalty', loyaltyRouter);
+    app.use('/api/v1/sambaza', sambazaRouter);
 
     // USSD must bypass standard JWT auth since telephony gateways fire requests externally
     app.use('/api/v1/ussd', ussdRouter);

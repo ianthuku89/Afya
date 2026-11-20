@@ -1,3 +1,4 @@
+
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
@@ -7,7 +8,7 @@ import { prisma } from '../lib/prisma.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt.js';
 import { validate } from '../middleware/validate.js';
 import { authenticate } from '../middleware/auth.js';
-import { encrypt } from '../lib/crypto.js';
+import { encrypt, hashPhone, normalizeKenyanPhone } from '../lib/crypto.js';
 
 export const authRouter = Router();
 
@@ -45,6 +46,13 @@ authRouter.post('/register', validate(RegisterSchema), async (req, res, next) =>
             return res.status(409).json({ success: false, error: { code: 'EMAIL_EXISTS', message: 'Email already registered' } });
         }
 
+        const normalizedPhone = phoneNumber ? normalizeKenyanPhone(phoneNumber) : null;
+        const phoneHash = normalizedPhone ? hashPhone(normalizedPhone) : null;
+
+        if (phoneHash && (await prisma.user.findUnique({ where: { phoneHash } }))) {
+            return res.status(409).json({ success: false, error: { code: 'PHONE_EXISTS', message: 'Phone number already registered' } });
+        }
+
         // bcrypt cost factor 12 — ~350ms per hash, resists GPU brute-force (OWASP A07)
         const passwordHash = await bcrypt.hash(password, 12);
 
@@ -55,6 +63,7 @@ authRouter.post('/register', validate(RegisterSchema), async (req, res, next) =>
                 fullName,
                 nationalId: nationalId ? encrypt(nationalId) : null,
                 phoneNumber: phoneNumber ? encrypt(phoneNumber) : null,
+                phoneHash,
                 shaId,
                 role: role || 'PATIENT',
                 wallet: {
@@ -181,4 +190,3 @@ authRouter.post('/logout', authenticate, async (req, res, next) => {
         res.json({ success: true, data: { message: 'Logged out successfully' } });
     } catch (err) { next(err); }
 });
-

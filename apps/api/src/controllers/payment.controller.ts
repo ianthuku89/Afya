@@ -2,15 +2,13 @@ import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 import { z } from 'zod';
-// ⚠️ ADJUST THIS IMPORT to match your crypto.ts export (nationalId/phoneNumber are
-// stored AES-256-GCM encrypted, so they must be decrypted before use with Daraja).
 import { decrypt } from '../lib/crypto.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { creditShifAccount } from '../services/shifService.js';
 import { getTierFromStreak } from '../routes/afyascore.js';
 
-type ContributionSource = 'MPESA' | 'AUTO_DEDUCT' | 'MERCHANT';
+type ContributionSource = 'MPESA' | 'AUTO_DEDUCT' | 'MERCHANT' | 'SAMBAZA';
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 // SHA SHIF Paybill is the FINAL DESTINATION of the money, not the shortcode we
@@ -56,7 +54,7 @@ export function normalizeMsisdn(raw?: string | null): string | null {
 }
 
 /** Decrypts an AES-256-GCM PII field; falls back to the raw value for legacy plaintext rows. */
-function readPii(value?: string | null): string | null {
+export function readPii(value?: string | null): string | null {
     if (!value) return null;
     try {
         return decrypt(value);
@@ -672,6 +670,131 @@ export async function initiateSHIFDeduction(userId: string, triggerTxRef: string
     }
 }
 
+export const SAMBAZA_AMOUNT_KES = DAILY_SHIF_DEDUCTION; // 30
+export const SAMBAZA_DAILY_CAP_KES = 300; // per sender per EAT day (10 people). Confirm this number.
+const SAMBAZA_IN_FLIGHT_MS = 10 * 60 * 1000; // an unanswered prompt stops blocking after 10 min
+
+type SambazaBlock = { ok: false; status: number; code: string; message: string };
+const sambazaBlock = (status: number, code: string, message: string): SambazaBlock => ({ ok: false, status, code, message });
+
+/** True if the recipient already has a SHIF-type payment confirmed today, or one genuinely in flight. */
+export async function recipientCoveredToday(recipientUserId: string): Promise<boolean> {
+    const n = await prisma.transaction.count({
+        where: {
+            wallet: { userId: recipientUserId },
+            AND: [
+                {
+                    OR: [
+                        { status: 'CONFIRMED', createdAt: { gte: startOfEatDay() } },
+                        { status: { in: ['PENDING', 'PROCESSING'] }, createdAt: { gte: new Date(Date.now() - SAMBAZA_IN_FLIGHT_MS) } },
+                    ],
+                },
+                {
+                    OR: [
+                        { source: { in: ['MPESA', 'AUTO_DEDUCT', 'SAMBAZA'] } },
+                        { source: 'MERCHANT', shifAmountKES: { gt: 0 } },
+                    ],
+                },
+            ],
+        },
+    });
+    return n > 0;
+}
+
+export async function senderSambazaTotalToday(senderUserId: string): Promise<number> {
+    const agg = await prisma.transaction.aggregate({
+        where: {
+            senderUserId,
+            source: 'SAMBAZA',
+            OR: [
+                { status: 'CONFIRMED', createdAt: { gte: startOfEatDay() } },
+                { status: { in: ['PENDING', 'PROCESSING'] }, createdAt: { gte: new Date(Date.now() - SAMBAZA_IN_FLIGHT_MS) } },
+            ],
+        },
+        _sum: { amountKES: true },
+    });
+    return agg._sum.amountKES ?? 0;
+}
+
+/** One rule-set used by BOTH /sambaza/lookup (what the app shows) and the actual payment (what is enforced). */
+export async function checkSambazaEligibility(senderId: string, recipientId: string) {
+    const recipient = await prisma.user.findUnique({
+        where: { id: recipientId },
+        select: { fullName: true, nationalId: true, isActive: true, role: true, wallet: { select: { id: true, isActive: true } } },
+    });
+    if (!recipient || !recipient.isActive || recipient.role !== 'PATIENT' || !recipient.wallet?.isActive) {
+        return sambazaBlock(409, 'RECIPIENT_UNAVAILABLE', 'That account cannot receive contributions right now');
+    }
+    const nationalId = readPii(recipient.nationalId);
+    if (!nationalId) {
+        // Without a national ID we cannot settle KES 30 to their SHA account.
+        return sambazaBlock(409, 'RECIPIENT_NO_NATIONAL_ID', "They haven't added their ID number yet, so we can't pay SHIF for them");
+    }
+    if (await recipientCoveredToday(recipientId)) {
+        return sambazaBlock(409, 'ALREADY_COVERED_TODAY', "They're already covered for today. Try again tomorrow");
+    }
+    if ((await senderSambazaTotalToday(senderId)) + SAMBAZA_AMOUNT_KES > SAMBAZA_DAILY_CAP_KES) {
+        return sambazaBlock(429, 'DAILY_CAP_REACHED', 'Daily Sambaza limit reached. Try again tomorrow');
+    }
+    return { ok: true as const, recipient: { walletId: recipient.wallet.id } };
+}
+
+export async function initiateSambazaPayment(senderId: string, recipientId: string, payerPhone?: string) {
+    const simulate = !darajaConfigured();
+    if (simulate) assertCanSimulate(); // throws in production
+
+    const eligibility = await checkSambazaEligibility(senderId, recipientId);
+    if (!eligibility.ok) return eligibility;
+
+    const sender = await prisma.user.findUnique({ where: { id: senderId }, select: { phoneNumber: true } });
+    const phoneNumber = normalizeMsisdn(payerPhone) || normalizeMsisdn(readPii(sender?.phoneNumber));
+    if (!phoneNumber) return sambazaBlock(400, 'PAYER_PHONE_REQUIRED', 'Add the M-PESA number to charge');
+
+    const shortCode = process.env.DARAJA_SHORTCODE || '174379';
+    const tx = await createPendingDarajaTransaction(
+        eligibility.recipient.walletId, // RECIPIENT's wallet: they get the streak/tier credit
+        phoneNumber,                    // SENDER's phone: the number that is charged
+        shortCode,
+        'SAMBAZA',
+        SAMBAZA_AMOUNT_KES,
+        { senderUserId: senderId, recipientUserId: recipientId },
+    );
+
+    if (simulate) {
+        const checkoutRequestId = `SMB_${crypto.randomBytes(6).toString('hex')}`;
+        await prisma.transaction.update({ where: { id: tx.id }, data: { checkoutRequestId } });
+        await finalizePayment(checkoutRequestId, { resultCode: 0, resultDesc: 'Simulated', receipt: 'SIMULATED', paidAmount: SAMBAZA_AMOUNT_KES });
+        return { ok: true as const, checkoutRequestId, transactionId: tx.id };
+    }
+
+    try {
+        const stk = await sendStkPush({
+            amount: SAMBAZA_AMOUNT_KES,
+            phone: phoneNumber,
+            callbackUrl: shifCallbackUrl(),
+            // Deliberately NOT the recipient's national ID: the sender's M-PESA prompt/SMS shows the account reference.
+            // SHA settlement uses the recipient's ID from our DB (settleToShaPaybill), not from this field.
+            accountRef: `SMB${tx.id.replace(/-/g, '').slice(0, 9)}`, // 12 chars
+            description: 'SHIF Sambaza',
+        });
+
+        if (String(stk.ResponseCode) !== '0') {
+            await prisma.transaction.update({ where: { id: tx.id }, data: { status: 'FAILED', resultDesc: stk.ResponseDescription || stk.errorMessage } });
+            logger.error('[Sambaza] STK rejected', stk);
+            return sambazaBlock(502, 'STK_FAILED', 'Could not send the M-PESA prompt. Try again');
+        }
+        await prisma.transaction.update({
+            where: { id: tx.id },
+            data: { checkoutRequestId: stk.CheckoutRequestID, merchantRequestId: stk.MerchantRequestID },
+        });
+        return { ok: true as const, checkoutRequestId: stk.CheckoutRequestID as string, transactionId: tx.id };
+    } catch (err) {
+        logger.error('[Sambaza] STK errored', err);
+        await prisma.transaction.update({ where: { id: tx.id }, data: { status: 'FAILED' } });
+        return sambazaBlock(502, 'STK_FAILED', 'Could not send the M-PESA prompt. Try again');
+    }
+}
+
 // ── STK PUSH #3: SINGLE-PROMPT MERCHANT PAYMENT (merchant + SHIF) ─────────────
 /**
  * ONE prompt for the full total on OUR shortcode. After the callback confirms it:
@@ -693,7 +816,7 @@ export async function shifDoneOrInFlightToday(userId: string): Promise<boolean> 
             wallet: { userId },
             createdAt: { gte: startOfEatDay() },
             status: { in: ['PENDING', 'PROCESSING', 'CONFIRMED'] },
-            OR: [{ source: 'MERCHANT', shifAmountKES: { gt: 0 } }, { source: 'AUTO_DEDUCT' }],
+            OR: [{ source: 'MERCHANT', shifAmountKES: { gt: 0 } }, { source: 'AUTO_DEDUCT' }, { source: 'SAMBAZA' }],
         },
     });
     return n > 0;
@@ -705,7 +828,7 @@ export async function getShifSummary(userId: string) {
         where: {
             wallet: { userId },
             status: 'CONFIRMED',
-            OR: [{ source: 'MERCHANT', shifAmountKES: { gt: 0 } }, { source: 'AUTO_DEDUCT' }],
+            OR: [{ source: 'MERCHANT', shifAmountKES: { gt: 0 } }, { source: 'AUTO_DEDUCT' }, { source: 'SAMBAZA' }],
         },
         orderBy: { createdAt: 'desc' },
         take: 20,
@@ -1133,7 +1256,7 @@ export const paymentController = {
             if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
             const id = req.params.checkoutRequestId;
-            const where = { checkoutRequestId: id, wallet: { userId } };
+            const where = { checkoutRequestId: id, OR: [{ wallet: { userId } }, { senderUserId: userId }] };
 
             let tx = await prisma.transaction.findFirst({ where });
             if (!tx) return res.status(404).json({ success: false, error: 'Transaction not found' });
@@ -1161,7 +1284,7 @@ export const paymentController = {
 
             let streak: number | undefined;
             let tier: string | undefined;
-            if (status === 'SUCCESS') {
+            if (status === 'SUCCESS' && tx.source !== 'SAMBAZA') {
                 const score = await prisma.afyaScore.findUnique({ where: { userId } });
                 streak = score?.streakDays;
                 tier = score?.tier as string | undefined;
