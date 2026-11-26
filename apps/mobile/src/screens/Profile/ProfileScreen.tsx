@@ -1,10 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, SafeAreaView, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  SafeAreaView,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/auth';
 import { client } from '../../api/client';
 import { useNavigation } from '@react-navigation/native';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { colors, fonts, radii, shadows, tabularNums, tierColors } from '../../theme';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuthStore();
@@ -18,7 +28,7 @@ export default function ProfileScreen() {
     (async () => {
       const compatible = await LocalAuthentication.hasHardwareAsync();
       setIsBiometricSupported(compatible);
-      
+
       const enrolled = await LocalAuthentication.isEnrolledAsync();
       setIsBiometricEnrolled(enrolled);
 
@@ -41,7 +51,7 @@ export default function ProfileScreen() {
       Alert.alert("Hardware Unavailable", "Your device does not support or have biometrics configured.");
       return;
     }
-    
+
     setLockingStatus("PENDING");
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: "Verify identity to change security settings",
@@ -56,102 +66,355 @@ export default function ProfileScreen() {
     }
   };
 
+  const coverageRows: { label: string; value: string; active?: boolean }[] = [
+    { label: 'SHA Membership Plan', value: 'SHA Universal' },
+    { label: 'Primary Healthcare Fund', value: 'Active ✓', active: true },
+    { label: 'Emergency Fund', value: 'Active ✓', active: true },
+    { label: 'Preventive Tier', value: afyaData ? `${afyaData.tierLabel} Tier` : 'Loading...' },
+    { label: 'Facility Access', value: afyaData?.tierFacilities || 'Level 1 & 2' },
+    { label: 'SHIF Paybill Routing', value: '200222' },
+    { label: 'Auto-Deduct Rate', value: 'KES 30 / day' },
+  ];
+
+  const tierDotColor = afyaData
+    ? tierColors[(afyaData.tier || '').toUpperCase()] ?? colors.muted
+    : colors.muted;
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-900">
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
-        
+    <SafeAreaView style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.content}>
+
         {/* Profile Header */}
-        <View className="items-center mb-8 mt-4">
-          <View className="w-24 h-24 rounded-full bg-teal-950 border-4 border-teal-800 items-center justify-center mb-4">
-            <Feather name="user" size={36} color="white" />
+        <View style={[styles.card, styles.profileCard]}>
+          <View style={styles.avatar}>
+            <Feather name="user" size={36} color={colors.accent} />
           </View>
-          <Text className="text-white text-2xl font-bold font-sans">{user?.name || 'Citizen'}</Text>
-          <Text className="text-slate-400 text-sm mt-1">SHA Member · Nairobi County</Text>
+          <Text style={styles.name}>{user?.name || 'Citizen'}</Text>
+          <Text style={styles.small}>SHA Member · Nairobi County</Text>
+
           {afyaData && (
-            <TouchableOpacity 
-              className="flex-row items-center gap-2 mt-3"
+            <TouchableOpacity
+              style={styles.badgeRow}
               onPress={() => navigation.navigate('TierBenefits' as never)}
+              accessibilityRole="button"
+              accessibilityLabel={`${afyaData.tierLabel} tier, ${afyaData.streakDays} day streak. View tier benefits`}
             >
-              <View className="bg-teal-500/20 px-3 py-1 rounded-full border border-teal-500/30">
-                <Text className="text-teal-400 text-xs font-bold">{afyaData.tierLabel} Tier</Text>
+              <View style={styles.tierBadge}>
+                <View style={[styles.dot, { backgroundColor: tierDotColor }]} />
+                <Text style={styles.tierBadgeText}>{afyaData.tierLabel} Tier</Text>
               </View>
-              <View className="bg-amber-500/20 px-3 py-1 rounded-full border border-amber-500/30">
-                <Text className="text-amber-400 text-xs font-bold">🔥 {afyaData.streakDays} Day Streak</Text>
+              <View style={styles.streakBadge}>
+                <Feather name="zap" size={13} color={colors.accent} />
+                <Text style={[styles.streakBadgeText, tabularNums]}>{afyaData.streakDays} Day Streak</Text>
               </View>
             </TouchableOpacity>
           )}
-          <View className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 mt-4">
-            <Text className="text-teal-400 font-mono text-sm font-bold tracking-widest">SHA-KE-2024-8821</Text>
+
+          <View style={styles.memberId}>
+            <Text style={[styles.memberIdText, tabularNums]}>SHA-KE-2024-8821</Text>
           </View>
         </View>
 
         {/* Coverage Details */}
-        <View className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-4">
-          <Text className="text-teal-400 text-xs font-mono font-bold tracking-widest mb-4">COVERAGE DETAILS</Text>
-          
-          {[
-            { label: 'SHA Membership Plan', value: 'SHA Universal' },
-            { label: 'Primary Healthcare Fund', value: 'Active ✓' },
-            { label: 'Emergency Fund', value: 'Active ✓' },
-            { label: 'Preventive Tier', value: afyaData ? `${afyaData.tierLabel} Tier` : 'Loading...' },
-            { label: 'Facility Access', value: afyaData?.tierFacilities || 'Level 1 & 2' },
-            { label: 'SHIF Paybill Routing', value: '200222' },
-            { label: 'Auto-Deduct Rate', value: 'KES 30 / day' },
-          ].map((item, idx) => (
-            <View key={item.label} className={`flex-row justify-between py-3 ${idx !== 6 ? 'border-b border-white/10' : ''}`}>
-              <Text className="text-slate-400 font-medium text-xs">{item.label}</Text>
-              <Text className="text-white font-bold text-xs">{item.value}</Text>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>COVERAGE DETAILS</Text>
+
+          {coverageRows.map((item, idx) => (
+            <View
+              key={item.label}
+              style={[styles.listRow, idx !== coverageRows.length - 1 && styles.divider]}
+            >
+              <Text style={styles.rowLabel}>{item.label}</Text>
+              <View style={styles.rowValueWrap}>
+                {item.active && <View style={[styles.dot, { backgroundColor: colors.accent }]} />}
+                <Text style={[styles.rowValue, tabularNums]}>{item.value}</Text>
+              </View>
             </View>
           ))}
         </View>
 
         {/* Data & Privacy (DHA Compliant) */}
-        <View className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-8">
-          <Text className="text-amber-400 text-xs font-mono font-bold tracking-widest mb-4">DATA & PRIVACY (KDPA 2019)</Text>
-          
-          <TouchableOpacity onPress={handleFHIRDownload} className="flex-row items-center py-4 border-b border-white/10">
-            <Feather name="download-cloud" size={18} color="#94a3b8" />
-            <Text className="text-slate-200 font-medium ml-3 flex-1">Download My Records (FHIR)</Text>
-            <Feather name="chevron-right" size={18} color="#94a3b8" />
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>DATA & PRIVACY (KDPA 2019)</Text>
+
+          <TouchableOpacity
+            onPress={handleFHIRDownload}
+            style={[styles.actionRow, styles.divider]}
+            accessibilityRole="button"
+          >
+            <View style={styles.iconBox}>
+              <Feather name="download-cloud" size={20} color={colors.accent} />
+            </View>
+            <Text style={styles.actionLabel}>Download My Records (FHIR)</Text>
+            <Feather name="chevron-right" size={18} color={colors.muted} />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleBiometricToggle} className="flex-row items-center py-4 border-b border-white/10">
-            <Feather name="shield" size={18} color="#94a3b8" />
-            <Text className="text-slate-200 font-medium ml-3 flex-1">Biometric App Lock</Text>
+          <TouchableOpacity
+            onPress={handleBiometricToggle}
+            style={[styles.actionRow, styles.divider]}
+            accessibilityRole="button"
+            accessibilityState={{ busy: lockingStatus === "PENDING" }}
+          >
+            <View style={styles.iconBox}>
+              <Feather name="shield" size={20} color={colors.accent} />
+            </View>
+            <Text style={styles.actionLabel}>Biometric App Lock</Text>
             {lockingStatus === "PENDING" ? (
-               <ActivityIndicator size="small" color="#00C165" />
+              <ActivityIndicator size="small" color={colors.accent} />
             ) : (
-               <Text className={isBiometricEnrolled ? "text-teal-400 font-bold" : "text-slate-500 font-bold"}>
-                 {isBiometricEnrolled ? 'Enabled' : 'Unavailable'}
-               </Text>
+              <View style={styles.statusRow}>
+                <View
+                  style={[
+                    styles.dot,
+                    { backgroundColor: isBiometricEnrolled ? colors.accent : colors.muted },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.statusText,
+                    { color: isBiometricEnrolled ? colors.accent : colors.muted },
+                  ]}
+                >
+                  {isBiometricEnrolled ? 'Enabled' : 'Unavailable'}
+                </Text>
+              </View>
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            className="flex-row items-center py-4 border-b border-white/10"
+          <TouchableOpacity
+            style={[styles.actionRow, styles.divider]}
             onPress={() => navigation.navigate('TierBenefits' as never)}
+            accessibilityRole="button"
           >
-            <Feather name="award" size={18} color="#94a3b8" />
-            <Text className="text-slate-200 font-medium ml-3 flex-1">Preventive Packages Infographic</Text>
-            <Feather name="chevron-right" size={18} color="#94a3b8" />
+            <View style={styles.iconBox}>
+              <Feather name="award" size={20} color={colors.accent} />
+            </View>
+            <Text style={styles.actionLabel}>Preventive Packages Infographic</Text>
+            <Feather name="chevron-right" size={18} color={colors.muted} />
           </TouchableOpacity>
 
-          <TouchableOpacity className="flex-row items-center py-4">
-            <Feather name="external-link" size={18} color="#94a3b8" />
-            <Text className="text-slate-200 font-medium ml-3 flex-1">ODPC Data Protection Portal</Text>
-            <Feather name="chevron-right" size={18} color="#94a3b8" />
+          <TouchableOpacity style={styles.actionRow} accessibilityRole="button">
+            <View style={styles.iconBox}>
+              <Feather name="external-link" size={20} color={colors.accent} />
+            </View>
+            <Text style={styles.actionLabel}>ODPC Data Protection Portal</Text>
+            <Feather name="chevron-right" size={18} color={colors.muted} />
           </TouchableOpacity>
         </View>
 
         {/* Logout */}
-        <TouchableOpacity 
-          className="bg-red-500/10 border border-red-500/30 rounded-xl py-4 items-center mb-6"
+        <TouchableOpacity
+          style={styles.secondaryButton}
           onPress={logout}
+          accessibilityRole="button"
         >
-          <Text className="text-red-400 font-bold">Sign Out</Text>
+          <Text style={styles.secondaryButtonText}>Sign Out</Text>
         </TouchableOpacity>
 
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.ground,
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 60,
+    gap: 16,
+  },
+  small: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.muted,
+  },
+
+  // Cards
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.card,
+    padding: 22,
+    ...shadows.card,
+  },
+  sectionTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    color: colors.text,
+    marginBottom: 8,
+  },
+
+  // Profile header
+  profileCard: {
+    alignItems: 'center',
+    paddingVertical: 28,
+  },
+  avatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: colors.ground,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  name: {
+    fontFamily: fonts.bold,
+    fontSize: 28,
+    letterSpacing: -0.5,
+    color: colors.text,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    minHeight: 44,
+    marginTop: 8,
+  },
+  tierBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent + '14',
+    borderWidth: 1,
+    borderColor: colors.accent + '33',
+  },
+  tierBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.accent,
+  },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  streakBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.text,
+  },
+  memberId: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: radii.button,
+    backgroundColor: colors.ground,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  memberIdText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    letterSpacing: 1.5,
+    color: colors.accent,
+  },
+
+  // Status dot
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  statusText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+  },
+
+  // List rows
+  divider: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
+  listRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 14,
+  },
+  rowLabel: {
+    flexShrink: 1,
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.muted,
+  },
+  rowValueWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    flexShrink: 1,
+  },
+  rowValue: {
+    flexShrink: 1,
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.text,
+    textAlign: 'right',
+  },
+
+  // Action rows
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    minHeight: 44,
+    paddingVertical: 12,
+  },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.icon,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionLabel: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.text,
+  },
+
+  // Buttons
+  secondaryButton: {
+    height: 50,
+    borderRadius: radii.button,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButtonText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.text,
+  },
+});

@@ -1,9 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, SafeAreaView, TouchableOpacity, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
+import {
+  View, Text, SafeAreaView, TouchableOpacity, ActivityIndicator, ScrollView, RefreshControl, StyleSheet,
+} from 'react-native';
 import { useAuthStore } from '../../store/auth';
 import { client } from '../../api/client';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { colors, fonts, radii, shadows, tabularNums, tierColors } from '../../theme';
 
 interface CoverageQR {
   qrString: string;
@@ -34,11 +37,11 @@ interface CoverageStatus {
   }>;
 }
 
-const TIER_STYLES: Record<string, { bg: string; text: string; accent: string; facilities: string }> = {
-  BRONZE:   { bg: '#3D2B1E', text: '#CD7F32', accent: 'rgba(205,127,50,0.2)', facilities: 'Level 1 & 2 Facilities' },
-  SILVER:   { bg: '#2A2D35', text: '#C0C0C0', accent: 'rgba(192,192,192,0.2)', facilities: 'Level 2 & 3 Facilities' },
-  GOLD:     { bg: '#3D3520', text: '#FFD700', accent: 'rgba(255,215,0,0.2)', facilities: 'Level 2 & 3 Facilities' },
-  PLATINUM: { bg: '#0D2818', text: '#00C165', accent: 'rgba(0,193,101,0.2)', facilities: 'Level 4 & 5 Hospitals' },
+const TIER_FACILITIES: Record<string, string> = {
+  BRONZE: 'Level 1 & 2 Facilities',
+  SILVER: 'Level 2 & 3 Facilities',
+  GOLD: 'Level 2 & 3 Facilities',
+  PLATINUM: 'Level 4 & 5 Hospitals',
 };
 
 export default function CoverageScreen() {
@@ -86,103 +89,109 @@ export default function CoverageScreen() {
   }, [qrExpiry]);
 
   const tier = qrData?.tier || coverageData?.tier || 'BRONZE';
-  const tierStyle = TIER_STYLES[tier] || TIER_STYLES.BRONZE;
+  const tierDot = tierColors[tier] || tierColors.BRONZE;
+  const facilities = TIER_FACILITIES[tier] || TIER_FACILITIES.BRONZE;
   const streakDays = qrData?.streakDays ?? coverageData?.streakDays ?? 0;
   const isActive = qrData?.coverageActive ?? coverageData?.coverageActive ?? false;
+  const statusColor = isActive ? colors.accent : colors.danger;
+  const expiryColor = qrExpiry > 60 ? colors.accent : colors.danger;
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-slate-900 justify-center items-center">
-        <ActivityIndicator size="large" color="#00C165" />
-        <Text className="text-slate-500 mt-4 font-mono text-xs">Loading coverage...</Text>
+      <SafeAreaView style={[s.screen, s.centered]}>
+        <ActivityIndicator size="large" color={colors.accent} />
+        <Text style={[s.small, { marginTop: 16 }]}>Loading coverage...</Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-900">
+    <SafeAreaView style={s.screen}>
       <ScrollView
-        contentContainerStyle={{ padding: 20 }}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchData} tintColor="#00C165" />}
+        contentContainerStyle={s.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={fetchData}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
       >
         {/* Header */}
-        <View className="flex-row justify-between items-center mb-6">
-          <View>
-            <Text className="text-slate-500 font-medium">Hello, {user?.email || 'Citizen'}</Text>
-            <Text className="text-white text-2xl font-bold">My Coverage</Text>
+        <View style={s.header}>
+          <View style={s.headerText}>
+            <Text style={s.greeting} numberOfLines={1}>Hello, {user?.email || 'Citizen'}</Text>
+            <Text style={s.title}>My Coverage</Text>
           </View>
           <TouchableOpacity
-            className="px-3 py-1 rounded-full flex-row items-center gap-1"
-            style={{ backgroundColor: tierStyle.accent, borderWidth: 1, borderColor: tierStyle.text }}
+            style={s.tierPill}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             onPress={() => navigation.navigate('TierBenefits' as never)}
+            accessibilityRole="button"
+            accessibilityLabel={`${qrData?.tierLabel || 'Bronze'} tier, view tier benefits`}
           >
-            <Text className="text-xs font-bold" style={{ color: tierStyle.text }}>
-              {qrData?.tierLabel || 'Bronze'} Tier
-            </Text>
-            <Feather name="chevron-right" size={12} color={tierStyle.text} />
+            <View style={[s.dot, { backgroundColor: tierDot }]} />
+            <Text style={s.tierPillText}>{qrData?.tierLabel || 'Bronze'} Tier</Text>
+            <Feather name="chevron-right" size={14} color={colors.muted} />
           </TouchableOpacity>
         </View>
 
         {/* Tab Switcher */}
-        <View className="flex-row bg-white/5 border border-white/10 rounded-2xl p-1 mb-6">
-          <TouchableOpacity
-            className={`flex-1 py-3 rounded-xl items-center ${activeTab === 'qr' ? 'bg-teal-500' : ''}`}
-            onPress={() => setActiveTab('qr')}
-          >
-            <Text className={`font-bold ${activeTab === 'qr' ? 'text-white' : 'text-slate-400'}`}>
-              QR Coverage Proof
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            className={`flex-1 py-3 rounded-xl items-center ${activeTab === 'details' ? 'bg-teal-500' : ''}`}
-            onPress={() => setActiveTab('details')}
-          >
-            <Text className={`font-bold ${activeTab === 'details' ? 'text-white' : 'text-slate-400'}`}>
-              Coverage Details
-            </Text>
-          </TouchableOpacity>
+        <View style={s.tabs}>
+          {([
+            { key: 'qr', label: 'QR Coverage Proof' },
+            { key: 'details', label: 'Coverage Details' },
+          ] as const).map((t) => {
+            const on = activeTab === t.key;
+            return (
+              <TouchableOpacity
+                key={t.key}
+                style={[s.tab, on && s.tabActive]}
+                onPress={() => setActiveTab(t.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+              >
+                <Text style={[s.tabText, on && s.tabTextActive]}>{t.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {activeTab === 'qr' ? (
           <>
             {/* QR Code Card */}
-            <View
-              className="rounded-3xl p-6 mb-6 items-center"
-              style={{ backgroundColor: tierStyle.bg, borderWidth: 1, borderColor: tierStyle.text + '40' }}
-            >
+            <View style={[s.card, { alignItems: 'center' }]}>
               {/* Coverage Status */}
-              <View className="flex-row items-center gap-2 mb-4">
-                <View
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: isActive ? '#00C165' : '#E74C3C' }}
-                />
-                <Text className="font-bold" style={{ color: isActive ? '#00C165' : '#E74C3C' }}>
-                  {isActive ? '✅ SHIF Coverage Active' : '❌ Coverage Lapsed'}
+              <View style={[s.statusRow, { marginBottom: 20 }]}>
+                <View style={[s.dot, { backgroundColor: statusColor }]} />
+                <Text style={[s.statusText, { color: statusColor }]}>
+                  {isActive ? 'SHIF Coverage Active' : 'Coverage Lapsed'}
                 </Text>
               </View>
 
               {/* QR Code Area */}
-              <View className="w-48 h-48 bg-white rounded-2xl items-center justify-center mb-4 shadow-xl">
-                <View className="items-center">
-                  <Feather name="maximize" size={64} color="#0A0F1E" />
-                  <Text className="text-xs text-slate-600 mt-2 font-mono text-center">
-                    {qrData?.qrString?.substring(0, 20) || 'QR'}...
-                  </Text>
-                </View>
+              <View style={s.qrBox}>
+                <Feather name="maximize" size={64} color={colors.text} />
+                <Text style={[s.small, tabularNums, { marginTop: 8, textAlign: 'center' }]}>
+                  {qrData?.qrString?.substring(0, 20) || 'QR'}...
+                </Text>
               </View>
 
-              <Text className="text-white font-bold text-lg mb-1">{qrData?.patientName || user?.name || 'SHA Member'}</Text>
-              <Text className="text-xs font-mono mb-1" style={{ color: tierStyle.text }}>
-                {tierStyle.facilities}
-              </Text>
-              <Text className="text-amber-400 text-xs font-bold mb-4">
-                🔥 {streakDays}-Day Contribution Streak
-              </Text>
+              <Text style={s.patient}>{qrData?.patientName || user?.name || 'SHA Member'}</Text>
+              <View style={[s.statusRow, { marginTop: 6 }]}>
+                <View style={[s.dot, { backgroundColor: tierDot }]} />
+                <Text style={s.facilities}>{facilities}</Text>
+              </View>
+              <View style={[s.statusRow, { marginTop: 8, marginBottom: 16 }]}>
+                <Feather name="zap" size={14} color={colors.accent} />
+                <Text style={[s.streakText, tabularNums]}>{streakDays}-Day Contribution Streak</Text>
+              </View>
 
               {/* QR Expiry */}
-              <View className="flex-row items-center gap-2 mb-4">
-                <Feather name="clock" size={14} color={qrExpiry > 60 ? '#00C165' : '#E74C3C'} />
-                <Text className="text-xs" style={{ color: qrExpiry > 60 ? '#00C165' : '#E74C3C' }}>
+              <View style={[s.statusRow, { marginBottom: 20 }]}>
+                <Feather name="clock" size={14} color={expiryColor} />
+                <Text style={[s.expiryText, tabularNums, { color: expiryColor }]}>
                   {qrExpiry > 0
                     ? `Expires in ${Math.floor(qrExpiry / 60)}:${String(qrExpiry % 60).padStart(2, '0')}`
                     : 'QR expired — refresh to generate new one'
@@ -192,18 +201,24 @@ export default function CoverageScreen() {
 
               {/* Refresh QR button */}
               <TouchableOpacity
-                className="bg-white/10 rounded-xl py-3 px-6 flex-row items-center gap-2 border border-white/20"
+                style={[s.primaryButton, { alignSelf: 'stretch' }]}
                 onPress={fetchData}
+                accessibilityRole="button"
               >
-                <Feather name="refresh-cw" size={16} color="white" />
-                <Text className="text-white font-bold">Generate New QR</Text>
+                <Feather name="refresh-cw" size={16} color={colors.accentInk} />
+                <Text style={s.primaryText}>Generate New QR</Text>
               </TouchableOpacity>
             </View>
 
             {/* Usage Instructions */}
-            <View className="bg-teal-900/20 border border-teal-500/20 rounded-2xl p-4 mb-6">
-              <Text className="text-teal-400 font-bold mb-2">📱 How to use at hospital</Text>
-              <Text className="text-slate-400 text-xs leading-relaxed">
+            <View style={s.card}>
+              <View style={s.cardTitleRow}>
+                <View style={s.iconBox}>
+                  <Feather name="smartphone" size={20} color={colors.accent} />
+                </View>
+                <Text style={[s.sectionTitle, s.flex]}>How to use at hospital</Text>
+              </View>
+              <Text style={[s.body, { color: colors.muted }]}>
                 Present this QR code at any SHA-accredited facility. The facility scans it to verify your active SHIF membership and preventive tier package. Curative care is 100% free under the UHC Walk-In Walk-Out policy.
               </Text>
             </View>
@@ -211,70 +226,81 @@ export default function CoverageScreen() {
         ) : (
           <>
             {/* Coverage Details Tab */}
-            <View className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-4">
-              <Text className="text-teal-400 text-xs font-mono font-bold tracking-widest mb-4">SHIF MEMBERSHIP DETAILS</Text>
-              
-              <View className="flex-row justify-between py-3 border-b border-white/10">
-                <Text className="text-slate-400">Status</Text>
-                <Text className="font-bold" style={{ color: isActive ? '#00C165' : '#E74C3C' }}>
-                  {isActive ? 'Active ✓' : 'Lapsed'}
-                </Text>
+            <View style={s.card}>
+              <Text style={[s.eyebrow, { marginBottom: 6 }]}>SHIF MEMBERSHIP DETAILS</Text>
+
+              <View style={s.listRow}>
+                <Text style={s.listLabel}>Status</Text>
+                <View style={s.statusRow}>
+                  <View style={[s.dot, { backgroundColor: statusColor }]} />
+                  <Text style={[s.listValue, { color: statusColor }]}>{isActive ? 'Active' : 'Lapsed'}</Text>
+                </View>
               </View>
-              <View className="flex-row justify-between py-3 border-b border-white/10">
-                <Text className="text-slate-400">Preventive Tier</Text>
-                <Text className="font-bold" style={{ color: tierStyle.text }}>{qrData?.tierLabel || 'Bronze'}</Text>
+              <View style={[s.listRow, s.rowDivider]}>
+                <Text style={s.listLabel}>Preventive Tier</Text>
+                <View style={s.statusRow}>
+                  <View style={[s.dot, { backgroundColor: tierDot }]} />
+                  <Text style={s.listValue}>{qrData?.tierLabel || 'Bronze'}</Text>
+                </View>
               </View>
-              <View className="flex-row justify-between py-3 border-b border-white/10">
-                <Text className="text-slate-400">Facility Level</Text>
-                <Text className="text-white font-bold text-xs">{tierStyle.facilities}</Text>
+              <View style={[s.listRow, s.rowDivider]}>
+                <Text style={s.listLabel}>Facility Level</Text>
+                <Text style={s.listValue}>{facilities}</Text>
               </View>
-              <View className="flex-row justify-between py-3 border-b border-white/10">
-                <Text className="text-slate-400">Contribution Streak</Text>
-                <Text className="text-amber-400 font-bold">{streakDays} days 🔥</Text>
+              <View style={[s.listRow, s.rowDivider]}>
+                <Text style={s.listLabel}>Contribution Streak</Text>
+                <Text style={[s.listValue, tabularNums]}>{streakDays} days</Text>
               </View>
-              <View className="flex-row justify-between py-3 border-b border-white/10">
-                <Text className="text-slate-400">SHA Paybill</Text>
-                <Text className="text-white font-mono font-bold">200222</Text>
+              <View style={[s.listRow, s.rowDivider]}>
+                <Text style={s.listLabel}>SHA Paybill</Text>
+                <Text style={[s.listValue, tabularNums]}>200222</Text>
               </View>
-              <View className="flex-row justify-between py-3">
-                <Text className="text-slate-400">Auto-Deduct Rate</Text>
-                <Text className="text-teal-400 font-bold">KES 30 / day (on tx above KES 100)</Text>
+              <View style={[s.listRow, s.rowDivider]}>
+                <Text style={s.listLabel}>Auto-Deduct Rate</Text>
+                <Text style={[s.listValue, tabularNums, s.listValueWrap]}>KES 30 / day (on tx above KES 100)</Text>
               </View>
             </View>
 
             {/* Covered Services */}
-            <View className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-4">
-              <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-amber-400 text-xs font-mono font-bold tracking-widest">TIER-UNLOCKED SERVICES</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('TierBenefits' as never)}>
-                  <Text className="text-teal-400 text-xs font-bold">View Packages →</Text>
+            <View style={s.card}>
+              <View style={s.sectionHeader}>
+                <Text style={[s.eyebrow, s.flex]}>TIER-UNLOCKED SERVICES</Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('TierBenefits' as never)}
+                  hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                  style={s.inlineLink}
+                  accessibilityRole="link"
+                >
+                  <Text style={s.linkText}>View Packages</Text>
+                  <Feather name="arrow-right" size={14} color={colors.accent} />
                 </TouchableOpacity>
               </View>
               {coverageData?.coveredServices?.map((service, idx) => (
-                <View key={idx} className="flex-row items-center gap-2 mb-2">
-                  <Text className="text-teal-400">✓</Text>
-                  <Text className="text-slate-300 text-sm">{service}</Text>
+                <View key={idx} style={[s.serviceRow, idx > 0 && s.rowDivider]}>
+                  <Feather name="check" size={14} color={colors.accent} style={{ marginRight: 10 }} />
+                  <Text style={[s.body, s.flex]}>{service}</Text>
                 </View>
               )) || (
-                <Text className="text-slate-500">Contribute daily to unlock preventive packages</Text>
+                <Text style={[s.body, { color: colors.muted }]}>Contribute daily to unlock preventive packages</Text>
               )}
             </View>
 
             {/* Recent Facility Visits */}
             {coverageData?.recentVisits && coverageData.recentVisits.length > 0 && (
-              <View className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-4">
-                <Text className="text-slate-400 text-xs font-mono font-bold tracking-widest mb-4">RECENT FACILITY VISITS</Text>
+              <View style={s.card}>
+                <Text style={[s.eyebrow, { marginBottom: 6 }]}>RECENT FACILITY VISITS</Text>
                 {coverageData.recentVisits.map((visit, idx) => (
-                  <View key={idx} className="flex-row justify-between py-3 border-b border-white/10">
-                    <View>
-                      <Text className="text-white font-bold text-sm">{visit.facilityName}</Text>
-                      <Text className="text-slate-500 text-xs mt-1">
+                  <View key={idx} style={[s.visitRow, idx > 0 && s.rowDivider]}>
+                    <View style={[s.flex, { marginRight: 12 }]}>
+                      <Text style={s.visitName}>{visit.facilityName}</Text>
+                      <Text style={[s.small, tabularNums, { marginTop: 2 }]}>
                         {new Date(visit.date).toLocaleDateString('en-KE', { dateStyle: 'medium' })}
                       </Text>
                     </View>
-                    <View className={`px-2 py-1 rounded-md self-center ${visit.coverageVerified ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
-                      <Text className={`text-xs font-bold ${visit.coverageVerified ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {visit.coverageVerified ? 'Verified ✓' : 'Not verified'}
+                    <View style={s.statusRow}>
+                      <View style={[s.dot, { backgroundColor: visit.coverageVerified ? colors.accent : colors.danger }]} />
+                      <Text style={[s.visitStatus, { color: visit.coverageVerified ? colors.accent : colors.danger }]}>
+                        {visit.coverageVerified ? 'Verified' : 'Not verified'}
                       </Text>
                     </View>
                   </View>
@@ -287,3 +313,89 @@ export default function CoverageScreen() {
     </SafeAreaView>
   );
 }
+
+const s = StyleSheet.create({
+  flex: { flex: 1 },
+  screen: { flex: 1, backgroundColor: colors.ground },
+  centered: { justifyContent: 'center', alignItems: 'center' },
+  content: { padding: 20, paddingBottom: 60, gap: 16 },
+
+  // Header
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerText: { flex: 1, marginRight: 12 },
+  greeting: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted, marginBottom: 2 },
+  title: { fontFamily: fonts.bold, fontSize: 28, letterSpacing: -0.5, color: colors.text },
+  tierPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 12,
+    borderRadius: radii.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface,
+  },
+  tierPillText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
+
+  // Tabs
+  tabs: {
+    flexDirection: 'row', gap: 4, padding: 4, borderRadius: radii.button,
+    borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface,
+  },
+  tab: {
+    flex: 1, minHeight: 44, borderRadius: radii.icon, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 8, borderWidth: 1, borderColor: 'transparent',
+  },
+  tabActive: { backgroundColor: colors.accent + '14', borderColor: colors.accent + '33' },
+  tabText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.muted, textAlign: 'center' },
+  tabTextActive: { fontFamily: fonts.bold, color: colors.accent },
+
+  // Cards
+  card: {
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
+    borderRadius: radii.card, padding: 22, ...shadows.card,
+  },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+
+  // Typography
+  sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
+  eyebrow: { fontFamily: fonts.bold, fontSize: 13, letterSpacing: 0.6, color: colors.text },
+  body: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 21, color: colors.text },
+  small: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted, lineHeight: 18 },
+
+  // Icon box
+  iconBox: {
+    width: 44, height: 44, borderRadius: radii.icon, borderWidth: 1, borderColor: colors.line,
+    backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
+  },
+
+  // QR card
+  qrBox: {
+    width: 192, height: 192, borderRadius: radii.card, borderWidth: 1, borderColor: colors.line,
+    backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+  },
+  patient: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, textAlign: 'center' },
+  facilities: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted },
+  streakText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
+  expiryText: { fontFamily: fonts.medium, fontSize: 13, flexShrink: 1 },
+
+  // Status
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statusText: { fontFamily: fonts.bold, fontSize: 14 },
+
+  // Buttons and links
+  primaryButton: {
+    height: 52, borderRadius: radii.button, backgroundColor: colors.accent, paddingHorizontal: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  primaryText: { fontFamily: fonts.bold, fontSize: 15, color: colors.accentInk },
+  inlineLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  linkText: { fontFamily: fonts.bold, fontSize: 13, color: colors.accent },
+
+  // List rows
+  listRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14 },
+  listLabel: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted },
+  listValue: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
+  listValueWrap: { flexShrink: 1, marginLeft: 16, textAlign: 'right' },
+  rowDivider: { borderTopWidth: 1, borderTopColor: colors.line },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 },
+  serviceRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  visitRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14 },
+  visitName: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
+  visitStatus: { fontFamily: fonts.semibold, fontSize: 13 },
+});

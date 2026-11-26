@@ -1,8 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, SafeAreaView, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  SafeAreaView,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+  ActivityIndicator,
+  StyleSheet,
+} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { client } from '../../api/client';
+import { colors, fonts, radii, shadows, tabularNums } from '../../theme';
 
 interface Facility {
   id: string;
@@ -27,6 +37,7 @@ export default function FacilitiesScreen() {
   const [loading, setLoading] = useState(true);
   const [locationStatus, setLocationStatus] = useState<string>('Requesting permission...');
   const [search, setSearch] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -80,82 +91,104 @@ export default function FacilitiesScreen() {
     : facilities;
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-900">
-      <View className="px-6 pt-6 pb-2">
-        <Text className="text-white text-3xl font-bold tracking-tight mb-2">Find Care</Text>
-        <Text className="text-slate-400 mb-4 text-sm">SHA-accredited facilities covered by your SHIF</Text>
+    <SafeAreaView style={styles.screen}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>Find Care</Text>
+          <Text style={styles.subtitle}>SHA-accredited facilities covered by your SHIF</Text>
+        </View>
 
         {/* Tier Coverage Banner */}
-        <View className="bg-teal-900/20 border border-teal-500/20 rounded-2xl p-3 flex-row items-center gap-3 mb-6">
-          <View className="w-8 h-8 bg-teal-500/20 rounded-lg items-center justify-center">
-            <Feather name="shield" size={16} color="#14b8a6" />
-          </View>
-          <View>
-            <Text className="text-teal-400 text-sm font-bold">Your Coverage is Active</Text>
-            <Text className="text-slate-400 text-xs">Present your QR code at any facility below</Text>
+        <View style={styles.card}>
+          <View style={styles.bannerRow}>
+            <View style={styles.iconBox}>
+              <Feather name="shield" size={20} color={colors.accent} />
+            </View>
+            <View style={styles.bannerText}>
+              <Text style={styles.bannerTitle}>Your Coverage is Active</Text>
+              <Text style={styles.small}>Present your QR code at any facility below</Text>
+            </View>
           </View>
         </View>
 
-        <View className="bg-white/5 border border-white/10 rounded-2xl flex-row items-center px-4 py-3 mb-6">
-          <Feather name="search" size={20} color="#94a3b8" />
-          <TextInput 
+        <View style={[styles.searchBox, searchFocused && styles.searchBoxFocused]}>
+          <Feather name="search" size={20} color={searchFocused ? colors.accent : colors.muted} />
+          <TextInput
             placeholder="Search hospital names or county..."
-            placeholderTextColor="#64748b"
-            className="flex-1 text-white ml-3 font-medium h-8"
+            placeholderTextColor="#8A9099"
+            style={styles.searchInput}
             value={search}
             onChangeText={setSearch}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            accessibilityLabel="Search hospital names or county"
           />
         </View>
 
         {/* Tab Filters */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6 flex-row shrink-0 flex-grow-0 min-h-12 max-h-12">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterContent}
+        >
           {['All', 'Hospitals', 'Clinics', 'Pharmacy', 'Lab', 'Dental'].map((filter, idx) => (
-            <TouchableOpacity 
-              key={filter} 
-              className={`px-5 py-2 rounded-xl mr-3 border justify-center items-center h-10 ${idx === 0 ? 'bg-teal-500 border-teal-400' : 'bg-transparent border-slate-700'}`}
+            <TouchableOpacity
+              key={filter}
+              accessibilityRole="button"
+              accessibilityState={{ selected: idx === 0 }}
+              style={[styles.chip, idx === 0 && styles.chipActive]}
             >
-              <Text className={`font-bold ${idx === 0 ? 'text-white' : 'text-slate-400'}`}>{filter}</Text>
+              <Text style={[styles.chipText, idx === 0 && styles.chipTextActive]}>{filter}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={styles.listContent}>
         {loading ? (
-           <View className="py-20 items-center">
-             <ActivityIndicator size="large" color="#00C165" />
-             <Text className="text-slate-500 mt-4 font-mono text-xs">{locationStatus}</Text>
-           </View>
+          <View style={styles.centerState}>
+            <ActivityIndicator size="large" color={colors.accent} />
+            <Text style={[styles.small, styles.stateText]}>{locationStatus}</Text>
+          </View>
         ) : filtered.length === 0 ? (
-           <View className="py-20 items-center">
-             <Feather name="map-pin" size={40} color="#334155" />
-             <Text className="text-slate-400 mt-4 text-center">{search ? 'No matching facilities.' : locationStatus}</Text>
-           </View>
+          <View style={styles.centerState}>
+            <Feather name="map-pin" size={40} color={colors.muted} />
+            <Text style={[styles.body, styles.stateText, styles.centerText]}>
+              {search ? 'No matching facilities.' : locationStatus}
+            </Text>
+          </View>
         ) : (
           filtered.map((fac) => (
-            <View key={fac.id} className="bg-white/5 border border-white/10 rounded-3xl p-5 mb-4">
-              <View className="flex-row justify-between items-start mb-3">
-                <Text className="text-white font-bold text-lg flex-1 pr-4">{fac.name}</Text>
-                <View className={`px-2 py-1 rounded-md ${fac.fhirEnabled ? 'bg-emerald-500/10' : 'bg-amber-500/10'}`}>
-                  <Text className={`text-xs font-bold ${fac.fhirEnabled ? 'text-emerald-400' : 'text-amber-400'}`}>
+            <View key={fac.id} style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.facilityName}>{fac.name}</Text>
+                <View style={styles.statusRow}>
+                  <View
+                    style={[
+                      styles.dot,
+                      { backgroundColor: fac.fhirEnabled ? colors.accent : colors.muted },
+                    ]}
+                  />
+                  <Text style={styles.statusText}>
                     FHIR {fac.fhirEnabled ? '✓' : 'Pending'}
                   </Text>
                 </View>
               </View>
-              
-              <View className="flex-row items-center gap-3 mb-5 flex-wrap">
-                <View className="bg-slate-800 rounded-md px-2 py-1">
-                  <Text className="text-slate-300 text-xs font-mono">{fac.level}</Text>
+
+              <View style={styles.metaRow}>
+                <View style={styles.levelChip}>
+                  <Text style={styles.levelText}>{fac.level}</Text>
                 </View>
-                <View className="bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2 py-1">
-                  <Text className="text-emerald-400 text-xs font-bold tracking-wide">SHIF Covered</Text>
+                <View style={styles.coveredChip}>
+                  <Text style={styles.coveredText}>SHIF Covered</Text>
                 </View>
-                <Text className="text-slate-500 text-xs font-medium">{fac.distance} away</Text>
-                <Text className="text-slate-600 text-xs font-mono">MFL: {fac.mflCode}</Text>
+                <Text style={[styles.small, tabularNums]}>{fac.distance} away</Text>
+                <Text style={[styles.small, tabularNums]}>MFL: {fac.mflCode}</Text>
               </View>
 
-              <TouchableOpacity className="bg-teal-500 py-3 rounded-xl items-center shadow-lg">
-                <Text className="text-white font-bold tracking-wide">Verify Coverage Here</Text>
+              <TouchableOpacity style={styles.secondaryButton} accessibilityRole="button">
+                <Text style={styles.secondaryButtonText}>Verify Coverage Here</Text>
               </TouchableOpacity>
             </View>
           ))
@@ -164,3 +197,228 @@ export default function FacilitiesScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.ground,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    gap: 16,
+  },
+  title: {
+    fontFamily: fonts.bold,
+    fontSize: 30,
+    letterSpacing: -0.5,
+    color: colors.text,
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.muted,
+  },
+  body: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.text,
+  },
+  small: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+  },
+
+  // Cards
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.card,
+    padding: 22,
+    ...shadows.card,
+  },
+
+  // Coverage banner
+  bannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.icon,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerText: {
+    flex: 1,
+    gap: 2,
+  },
+  bannerTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.text,
+  },
+
+  // Search
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 52,
+    borderRadius: radii.button,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.ground,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  searchBoxFocused: {
+    borderColor: colors.accent,
+    backgroundColor: colors.surface,
+  },
+  searchInput: {
+    flex: 1,
+    height: 52,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.text,
+  },
+
+  // Filters
+  filterScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  filterContent: {
+    gap: 10,
+    paddingRight: 20,
+  },
+  chip: {
+    height: 44,
+    paddingHorizontal: 20,
+    borderRadius: radii.button,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipActive: {
+    backgroundColor: colors.accent + '14',
+    borderColor: colors.accent + '33',
+  },
+  chipText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.muted,
+  },
+  chipTextActive: {
+    fontFamily: fonts.bold,
+    color: colors.accent,
+  },
+
+  // List
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  centerState: {
+    paddingVertical: 80,
+    alignItems: 'center',
+  },
+  stateText: {
+    marginTop: 16,
+  },
+  centerText: {
+    textAlign: 'center',
+  },
+
+  // Facility card
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 16,
+    marginBottom: 14,
+  },
+  facilityName: {
+    flex: 1,
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    color: colors.text,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingTop: 5,
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  statusText: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  levelChip: {
+    backgroundColor: colors.ground,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  levelText: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.text,
+  },
+  coveredChip: {
+    backgroundColor: colors.accent + '14',
+    borderWidth: 1,
+    borderColor: colors.accent + '33',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  coveredText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.accent,
+  },
+
+  // Buttons
+  secondaryButton: {
+    height: 50,
+    borderRadius: radii.button,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButtonText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.text,
+  },
+});

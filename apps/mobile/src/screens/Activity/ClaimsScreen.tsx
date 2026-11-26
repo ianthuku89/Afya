@@ -1,6 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, SafeAreaView, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
+import {
+  View,
+  Text,
+  SafeAreaView,
+  FlatList,
+  ActivityIndicator,
+  RefreshControl,
+  StyleSheet,
+} from 'react-native';
 import { client } from '../../api/client';
+import { colors, fonts, radii, shadows, tabularNums, tierColors } from '../../theme';
 
 interface Visit {
   id: string;
@@ -11,13 +20,6 @@ interface Visit {
   tier: string;
   date: string;
 }
-
-const TIER_COLORS: Record<string, string> = {
-  BRONZE: '#CD7F32',
-  SILVER: '#C0C0C0',
-  GOLD: '#FFD700',
-  PLATINUM: '#00C165',
-};
 
 export default function VisitHistoryScreen() {
   const [visits, setVisits] = useState<Visit[]>([]);
@@ -39,30 +41,45 @@ export default function VisitHistoryScreen() {
   useEffect(() => { fetchVisits(); }, []);
 
   const renderItem = ({ item }: { item: Visit }) => {
-    const tierColor = TIER_COLORS[item.tier] || TIER_COLORS.BRONZE;
+    const tierColor = tierColors[item.tier] || tierColors.BRONZE;
     return (
-      <View className="bg-white/5 border border-white/10 p-4 rounded-2xl mb-4 mx-6">
-        <View className="flex-row justify-between mb-2">
-          <View className="flex-1 pr-4">
-            <Text className="font-bold text-white text-base">{item.facilityName}</Text>
-            <Text className="text-slate-500 text-xs mt-1">{item.county} · MFL: {item.facilityCode}</Text>
+      <View style={styles.card}>
+        <View style={styles.cardTop}>
+          <View style={styles.cardInfo}>
+            <Text style={styles.facilityName}>{item.facilityName}</Text>
+            <Text style={[styles.small, styles.metaLine]}>
+              {item.county} · MFL: <Text style={tabularNums}>{item.facilityCode}</Text>
+            </Text>
           </View>
-          <View className={`px-2 py-1 rounded-md self-start ${item.coverageActive ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
-            <Text className={`text-xs font-bold ${item.coverageActive ? 'text-emerald-400' : 'text-red-400'}`}>
+          <View style={styles.statusRow}>
+            <View
+              style={[
+                styles.dot,
+                { backgroundColor: item.coverageActive ? colors.accent : colors.danger },
+              ]}
+            />
+            <Text
+              style={[
+                styles.statusText,
+                { color: item.coverageActive ? colors.text : colors.danger },
+              ]}
+            >
               {item.coverageActive ? 'Covered ✓' : 'Not Covered'}
             </Text>
           </View>
         </View>
-        <View className="flex-row justify-between items-center">
-          <Text className="text-slate-500 text-xs font-mono">
+
+        <View style={styles.divider} />
+
+        <View style={styles.cardBottom}>
+          <Text style={[styles.small, tabularNums]}>
             {new Date(item.date).toLocaleDateString('en-KE', { dateStyle: 'medium' })}
           </Text>
-          <View className="flex-row items-center gap-x-2">
-            <View className="px-2 py-1 rounded-md" style={{ backgroundColor: tierColor + '1A' }}>
-              <Text className="text-xs font-bold" style={{ color: tierColor }}>
-                {item.tier.charAt(0) + item.tier.slice(1).toLowerCase()} Tier
-              </Text>
-            </View>
+          <View style={styles.tierChip}>
+            <View style={[styles.dot, { backgroundColor: tierColor }]} />
+            <Text style={styles.tierText}>
+              {item.tier.charAt(0) + item.tier.slice(1).toLowerCase()} Tier
+            </Text>
           </View>
         </View>
         {/* Privacy: No payment amounts shown — only coverage verification status */}
@@ -71,15 +88,15 @@ export default function VisitHistoryScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-900">
-      <View className="px-6 pt-6 pb-4">
-        <Text className="text-white text-3xl font-bold tracking-tight">Visit History</Text>
-        <Text className="text-slate-400 mt-1">Your facility visits with coverage verification</Text>
+    <SafeAreaView style={styles.screen}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Visit History</Text>
+        <Text style={styles.subtitle}>Your facility visits with coverage verification</Text>
       </View>
 
       {loading ? (
-        <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#00C165" />
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color={colors.accent} />
         </View>
       ) : (
         <FlatList
@@ -87,12 +104,21 @@ export default function VisitHistoryScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 24, paddingTop: 8 }}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchVisits} tintColor="#00C165" />}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={fetchVisits}
+              tintColor={colors.accent}
+              colors={[colors.accent]}
+            />
+          }
           ListEmptyComponent={
-            <View className="py-20 items-center">
-              <Text className="text-slate-500 text-base">No facility visits recorded yet.</Text>
-              <Text className="text-slate-600 text-xs mt-2">Present your QR code at any SHA-accredited facility</Text>
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>No facility visits recorded yet.</Text>
+              <Text style={[styles.small, styles.emptyHint]}>
+                Present your QR code at any SHA-accredited facility
+              </Text>
             </View>
           }
         />
@@ -100,3 +126,127 @@ export default function VisitHistoryScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.ground,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  title: {
+    fontFamily: fonts.bold,
+    fontSize: 30,
+    letterSpacing: -0.5,
+    color: colors.text,
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.muted,
+  },
+  small: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+  },
+
+  // List
+  listContent: {
+    padding: 20,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  loadingState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyState: {
+    paddingVertical: 80,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  emptyHint: {
+    marginTop: 8,
+    textAlign: 'center',
+  },
+
+  // Visit card
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.card,
+    padding: 22,
+    ...shadows.card,
+  },
+  cardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 16,
+  },
+  cardInfo: {
+    flex: 1,
+  },
+  facilityName: {
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    color: colors.text,
+  },
+  metaLine: {
+    marginTop: 4,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingTop: 5,
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  statusText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.line,
+    marginVertical: 16,
+  },
+  cardBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  tierChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: colors.ground,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  tierText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.text,
+  },
+});

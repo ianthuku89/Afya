@@ -1,9 +1,19 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, SafeAreaView, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
-import { useAuthStore } from '../../store/auth';
-import { client } from '../../api/client';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  SafeAreaView,
+  TouchableOpacity,
+  ScrollView,
+  RefreshControl,
+  StyleSheet,
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useAuthStore } from '../../store/auth';
+import { client } from '../../api/client';
+import { colors, fonts, radii, shadows, tabularNums, tierColors, tierFacilities } from '../../theme';
 
 interface CoverageData {
   coverageActive: boolean;
@@ -32,13 +42,6 @@ interface AfyaScoreData {
   } | null;
 }
 
-const TIER_STYLES: Record<string, { bg: string; text: string; border: string; glow: string; facilities: string }> = {
-  BRONZE:   { bg: '#3D2B1E', text: '#CD7F32', border: '#8B5E3C', glow: 'rgba(205,127,50,0.15)', facilities: 'Level 1 & 2 Facilities' },
-  SILVER:   { bg: '#2A2D35', text: '#C0C0C0', border: '#808080', glow: 'rgba(192,192,192,0.15)', facilities: 'Level 2 & 3 Facilities' },
-  GOLD:     { bg: '#3D3520', text: '#FFD700', border: '#DAA520', glow: 'rgba(255,215,0,0.15)', facilities: 'Level 2 & 3 Facilities' },
-  PLATINUM: { bg: '#0D2818', text: '#00C165', border: '#00A555', glow: 'rgba(0,193,101,0.15)', facilities: 'Level 4 & 5 Hospitals' },
-};
-
 export default function HomeScreen() {
   const { user } = useAuthStore();
   const navigation = useNavigation<any>();
@@ -46,7 +49,7 @@ export default function HomeScreen() {
   const [afyaData, setAfyaData] = useState<AfyaScoreData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [coverageRes, scoreRes] = await Promise.all([
         client.get('/wallet/coverage-status'),
@@ -59,204 +62,313 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
+
+  const onRefresh = () => {
+    setLoading(true);
+    fetchData();
+  };
 
   const tier = afyaData?.tier || coverage?.tier || 'BRONZE';
-  const tierStyle = TIER_STYLES[tier] || TIER_STYLES.BRONZE;
+  const tierDot = tierColors[tier] ?? tierColors.BRONZE;
+  const facilities = tierFacilities[tier] ?? tierFacilities.BRONZE;
+  const tierLabel = afyaData?.tierLabel || 'Bronze';
   const streakDays = afyaData?.streakDays ?? coverage?.streakDays ?? 0;
   const coverageActive = coverage?.coverageActive ?? false;
 
-  // Streak progress calculation (0 to 180 days for full Platinum)
-  const streakTarget = afyaData?.nextTier?.streakRequired || (streakDays < 30 ? 30 : streakDays < 90 ? 90 : 180);
+  // Progress toward the next tier (30 / 90 / 180 days)
+  const streakTarget =
+    afyaData?.nextTier?.streakRequired || (streakDays < 30 ? 30 : streakDays < 90 ? 90 : 180);
   const streakProgressPercent = Math.min(100, Math.round((streakDays / streakTarget) * 100));
 
+  const stats: { label: string; value: string }[] = [
+    { label: 'Preventive tier', value: `${tierLabel} package` },
+    { label: 'All-time best', value: `${afyaData?.longestStreak || streakDays} days` },
+    { label: 'Total contributed', value: `KES ${afyaData?.totalContributions?.toLocaleString() || '0'}` },
+    { label: 'SHA paybill', value: '200222 (Direct)' },
+  ];
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-900">
+    <SafeAreaView style={s.safe}>
+      <StatusBar style="dark" />
       <ScrollView
-        contentContainerStyle={{ padding: 20, paddingBottom: 60 }}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchData} tintColor="#00C165" />}
+        contentContainerStyle={s.content}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor={colors.accent} colors={[colors.accent]} />
+        }
       >
-
         {/* Header */}
-        <View className="flex-row justify-between items-center mb-6">
+        <View style={s.header}>
           <View>
-            <Text className="text-slate-400 text-sm font-medium">Habari, {user?.name || 'Citizen'} 👋</Text>
-            <Text className="text-white text-2xl font-bold tracking-tight">Afya Yako</Text>
+            <Text style={s.greeting}>Habari, {user?.name || 'Citizen'}</Text>
+            <Text style={s.title}>Afya Yako</Text>
           </View>
-          <View className="relative">
-            <View className="w-10 h-10 rounded-full bg-teal-800 items-center justify-center">
-              <Feather name="bell" size={18} color="white" />
-            </View>
-            <View className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-slate-900" />
-          </View>
-        </View>
-
-        {/* Coverage & Tier Streak Card */}
-        <TouchableOpacity
-          className="rounded-3xl p-6 mb-6 overflow-hidden relative"
-          style={{ backgroundColor: tierStyle.bg, borderWidth: 1, borderColor: tierStyle.border }}
-          onPress={() => navigation.navigate('TierBenefits' as never)}
-          activeOpacity={0.9}
-        >
-          {/* Coverage Badge */}
-          <View className="flex-row items-center justify-between mb-4">
-            <View className="flex-row items-center gap-2">
-              <View
-                className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: coverageActive ? '#00C165' : '#E74C3C' }}
-              />
-              <Text className="text-xs font-bold tracking-wider" style={{ color: coverageActive ? '#00C165' : '#E74C3C' }}>
-                {coverageActive ? 'SHIF COVERAGE ACTIVE' : 'COVERAGE LAPSED'}
-              </Text>
-            </View>
-            <View className="px-3 py-1 rounded-full flex-row items-center gap-1" style={{ backgroundColor: tierStyle.glow, borderWidth: 1, borderColor: tierStyle.border }}>
-              <Text className="text-xs font-bold" style={{ color: tierStyle.text }}>
-                {afyaData?.tierLabel || 'Bronze'} Tier
-              </Text>
-              <Feather name="chevron-right" size={12} color={tierStyle.text} />
-            </View>
-          </View>
-
-          {/* Facility Access Level */}
-          <Text className="text-slate-300 text-xs font-mono font-bold tracking-wider mb-1">FACILITY ACCESS</Text>
-          <Text className="text-white text-2xl font-extrabold mb-3">
-            {tierStyle.facilities}
-          </Text>
-
-          {/* Streak Display & Progress */}
-          <View className="bg-black/30 p-4 rounded-2xl mb-4 border border-white/10">
-            <View className="flex-row justify-between items-baseline mb-2">
-              <View className="flex-row items-center gap-1.5">
-                <Text className="text-amber-400 text-lg">🔥</Text>
-                <Text className="text-white text-xl font-extrabold">{streakDays} Day Streak</Text>
-              </View>
-              <Text className="text-slate-400 text-xs font-medium">
-                {afyaData?.nextTier ? `${afyaData.nextTier.streakNeeded}d to ${afyaData.nextTier.label}` : 'Max Tier Unlocked'}
-              </Text>
-            </View>
-
-            {/* Streak Progress Bar */}
-            <View className="h-2 rounded-full bg-white/10 overflow-hidden mb-2">
-              <View
-                className="h-full rounded-full"
-                style={{ width: `${streakProgressPercent}%`, backgroundColor: tierStyle.text }}
-              />
-            </View>
-
-            <View className="flex-row justify-between">
-              <Text className="text-slate-500 text-[10px]">Silver: 30d</Text>
-              <Text className="text-slate-400 text-[10px]">Gold: 90d</Text>
-              <Text className="text-emerald-400 text-[10px]">Platinum: 180d</Text>
-            </View>
-          </View>
-
-          {/* Action Buttons */}
-          <View className="flex-row gap-3 mb-3">
-            <TouchableOpacity
-              className="flex-1 bg-teal-500 rounded-xl py-3 items-center"
-              onPress={() => navigation.navigate('Contribute' as never)}
-            >
-              <Text className="text-white font-bold tracking-wide">+ Contribute KES 30</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="flex-1 bg-amber-500/90 rounded-xl py-3 flex-row items-center justify-center gap-1.5"
-              onPress={() => navigation.navigate('Sambaza' as never)}
-            >
-              <Feather name="users" size={14} color="white" />
-              <Text className="text-white font-bold tracking-wide">Sambaza</Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity
-            className="bg-white/10 rounded-xl py-3 items-center border border-white/20"
-            onPress={() => navigation.navigate('TierBenefits' as never)}
-          >
-            <Text className="text-white/90 font-bold tracking-wide">View Packages</Text>
+          <TouchableOpacity style={s.bell} accessibilityRole="button" accessibilityLabel="Notifications">
+            <Feather name="bell" size={20} color={colors.text} />
+            <View style={s.bellDot} />
           </TouchableOpacity>
-        </TouchableOpacity>
+        </View>
 
-        {/* Quick Stats Grid */}
-        <View className="flex-row flex-wrap justify-between mb-4">
-          <View className="w-[48%] bg-white/5 border border-white/10 rounded-2xl p-4 mb-3">
-            <Text className="text-slate-500 text-xs font-bold mb-1">Preventive Tier</Text>
-            <Text className="text-teal-400 text-sm font-semibold">
-              {afyaData?.tierLabel || 'Bronze'} Package
-            </Text>
+        {/* Coverage and streak card */}
+        <View style={[s.card, s.heroCard]}>
+          <View style={s.rowBetween}>
+            <View style={s.row}>
+              <View style={[s.dot, { backgroundColor: coverageActive ? colors.accent : colors.danger }]} />
+              <Text style={s.status}>{coverageActive ? 'SHIF coverage active' : 'Coverage lapsed'}</Text>
+            </View>
+            <TouchableOpacity
+              style={s.row}
+              onPress={() => navigation.navigate('TierBenefits' as never)}
+              accessibilityRole="button"
+              accessibilityLabel={`${tierLabel} tier, view benefits`}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+            >
+              <View style={[s.dot, { backgroundColor: tierDot }]} />
+              <Text style={s.tierChip}>{tierLabel} tier</Text>
+              <Feather name="chevron-right" size={14} color={colors.muted} />
+            </TouchableOpacity>
           </View>
-          <View className="w-[48%] bg-white/5 border border-white/10 rounded-2xl p-4 mb-3">
-            <Text className="text-slate-500 text-xs font-bold mb-1">All-Time Best</Text>
-            <Text className="text-amber-400 text-sm font-semibold">{afyaData?.longestStreak || streakDays} Days 🏆</Text>
+
+          <View style={s.gapXs}>
+            <Text style={s.label}>Facility access</Text>
+            <Text style={s.facility}>{facilities}</Text>
           </View>
-          <View className="w-[48%] bg-white/5 border border-white/10 rounded-2xl p-4 mb-3">
-            <Text className="text-slate-500 text-xs font-bold mb-1">Total Contributed</Text>
-            <Text className="text-amber-500 text-sm font-semibold">
-              KES {afyaData?.totalContributions?.toLocaleString() || '0'}
-            </Text>
+
+          <View style={s.divider} />
+
+          <View style={s.gapSm}>
+            <View style={s.rowBetweenBaseline}>
+              <View style={s.rowBaseline}>
+                <Text style={s.streakNumber}>{streakDays}</Text>
+                <Text style={s.streakLabel}>day streak</Text>
+              </View>
+              <Text style={s.small}>
+                {afyaData?.nextTier
+                  ? `${afyaData.nextTier.streakNeeded} days to ${afyaData.nextTier.label}`
+                  : 'Top tier unlocked'}
+              </Text>
+            </View>
+
+            <View style={s.track}>
+              <View style={[s.fill, { width: `${streakProgressPercent}%` }]} />
+            </View>
+
+            <View style={s.rowBetween}>
+              <Text style={s.milestone}>Silver · 30</Text>
+              <Text style={s.milestone}>Gold · 90</Text>
+              <Text style={s.milestone}>Platinum · 180</Text>
+            </View>
           </View>
-          <View className="w-[48%] bg-white/5 border border-white/10 rounded-2xl p-4 mb-3">
-            <Text className="text-slate-500 text-xs font-bold mb-1">SHA Paybill</Text>
-            <Text className="text-teal-400 text-sm font-semibold">
-              200222 (Direct)
-            </Text>
+
+          <View style={s.gapSmPlus}>
+            <TouchableOpacity
+              style={s.primaryBtn}
+              onPress={() => navigation.navigate('Contribute' as never)}
+              accessibilityRole="button"
+            >
+              <Text style={s.primaryBtnText}>Contribute KES 30</Text>
+            </TouchableOpacity>
+            <View style={s.btnRow}>
+              <TouchableOpacity
+                style={s.secondaryBtn}
+                onPress={() => navigation.navigate('Sambaza' as never)}
+                accessibilityRole="button"
+              >
+                <Text style={s.secondaryBtnText}>Sambaza</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.secondaryBtn}
+                onPress={() => navigation.navigate('TierBenefits' as never)}
+                accessibilityRole="button"
+              >
+                <Text style={s.secondaryBtnText}>View packages</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
-        {/* Auto-Deduct Banner */}
+        {/* Stats */}
+        <View style={[s.card, s.statsCard]}>
+          {stats.map((row, i) => (
+            <View key={row.label} style={[s.statRow, i > 0 && s.statRowBorder]}>
+              <Text style={s.statLabel}>{row.label}</Text>
+              <Text style={s.statValue}>{row.value}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Auto-deduct */}
         <TouchableOpacity
-          className="bg-teal-950 border border-teal-500/30 rounded-2xl p-5 mb-4"
+          style={[s.card, s.autoCard]}
           onPress={() => navigation.navigate('AutoDeduct' as never)}
+          activeOpacity={0.85}
+          accessibilityRole="button"
         >
-          <View className="flex-row items-center gap-4">
-            <View className="w-12 h-12 bg-teal-500/20 rounded-2xl items-center justify-center border border-teal-500/40">
-              <Feather name="zap" size={24} color="#34D399" />
-            </View>
-            <View className="flex-1">
-              <Text className="text-white text-base font-bold mb-1">M-PESA Auto-Deduct</Text>
-              <Text className="text-teal-100/70 text-xs leading-relaxed">
-                Fixed KES 30/day SHIF contribution on your first merchant transaction above KES 100.
-              </Text>
-            </View>
-            <Feather name="chevron-right" size={20} color="#34D399" />
+          <View style={s.iconBox}>
+            <Feather name="zap" size={20} color={colors.accent} />
           </View>
+          <View style={s.flex1}>
+            <Text style={s.autoTitle}>M-PESA Auto-Deduct</Text>
+            <Text style={s.autoBody}>
+              Fixed KES 30/day SHIF contribution on your first merchant transaction above KES 100.
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={16} color={colors.muted} />
         </TouchableOpacity>
 
-        {/* Tier Benefits Preview */}
+        {/* Tier benefits preview */}
         {afyaData?.perks && (
-          <TouchableOpacity
-            className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4"
-            onPress={() => navigation.navigate('TierBenefits' as never)}
-            activeOpacity={0.8}
-          >
-            <View className="flex-row justify-between items-center mb-3">
-              <Text className="text-xs font-bold tracking-wider" style={{ color: tierStyle.text }}>
-                {afyaData.tierLabel?.toUpperCase()} PREVENTIVE BENEFITS
-              </Text>
-              <Text className="text-teal-400 text-xs font-bold">See All →</Text>
+          <View style={[s.card, s.perksCard]}>
+            <View style={s.rowBetween}>
+              <View style={s.row}>
+                <View style={[s.dot, { backgroundColor: tierDot }]} />
+                <Text style={s.perksHeader}>{tierLabel} preventive benefits</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('TierBenefits' as never)}
+                accessibilityRole="button"
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 0 }}
+              >
+                <Text style={s.link}>See all</Text>
+              </TouchableOpacity>
             </View>
             {afyaData.perks.slice(0, 3).map((perk, idx) => (
-              <View key={idx} className="flex-row items-center gap-2 mb-2">
-                <Text style={{ color: tierStyle.text }}>✓</Text>
-                <Text className="text-slate-300 text-sm">{perk}</Text>
+              <View key={idx} style={s.perkRow}>
+                <Feather name="check" size={16} color={colors.accent} />
+                <Text style={s.perkText}>{perk}</Text>
               </View>
             ))}
-          </TouchableOpacity>
+          </View>
         )}
 
-        {/* USSD Banner */}
-        <View className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex-row items-center gap-3 mb-6">
-          <View className="w-10 h-10 bg-amber-500/20 rounded-xl items-center justify-center">
-            <Feather name="phone-call" size={18} color="#fbbf24" />
+        {/* USSD */}
+        <View style={[s.card, s.ussdCard]}>
+          <View style={s.ussdIcon}>
+            <Feather name="phone" size={16} color={colors.muted} />
           </View>
           <View>
-            <Text className="text-amber-400 text-sm font-bold">No internet? No problem.</Text>
-            <Text className="text-slate-400 text-xs mt-1">Dial *384# for USSD access</Text>
+            <Text style={s.ussdTitle}>No internet? No problem.</Text>
+            <Text style={s.ussdBody}>Dial *384# for USSD access</Text>
           </View>
         </View>
-
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.ground },
+  content: { padding: 20, paddingBottom: 48, gap: 16 },
+
+  // Header
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingHorizontal: 4, paddingBottom: 8 },
+  greeting: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted, marginBottom: 4 },
+  title: { fontFamily: fonts.bold, fontSize: 28, color: colors.text, letterSpacing: -0.5 },
+  bell: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  bellDot: { position: 'absolute', top: 10, right: 11, width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent },
+
+  // Cards
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.card,
+    ...shadows.card,
+  },
+  heroCard: { padding: 22, gap: 22 },
+  statsCard: { paddingHorizontal: 22, paddingVertical: 4 },
+  autoCard: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 20, paddingHorizontal: 22 },
+  perksCard: { padding: 22, gap: 14 },
+  ussdCard: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, paddingHorizontal: 22 },
+
+  // Layout helpers
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  rowBetweenBaseline: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  rowBaseline: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  flex1: { flex: 1, gap: 4 },
+  gapXs: { gap: 6 },
+  gapSm: { gap: 14 },
+  gapSmPlus: { gap: 10 },
+  divider: { height: 1, backgroundColor: colors.line },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+
+  // Hero card text
+  status: { fontFamily: fonts.semibold, fontSize: 12, color: colors.text },
+  tierChip: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted },
+  label: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted },
+  facility: { fontFamily: fonts.bold, fontSize: 23, color: colors.text, letterSpacing: -0.4 },
+  streakNumber: { fontFamily: fonts.bold, fontSize: 42, lineHeight: 46, color: colors.text, letterSpacing: -1, ...tabularNums },
+  streakLabel: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted },
+  small: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted },
+  track: { height: 4, borderRadius: 2, backgroundColor: colors.line, overflow: 'hidden' },
+  fill: { height: '100%', backgroundColor: colors.accent },
+  milestone: { fontFamily: fonts.medium, fontSize: 11, color: colors.muted },
+
+  // Buttons
+  primaryBtn: { height: 50, borderRadius: radii.button, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  primaryBtnText: { fontFamily: fonts.bold, fontSize: 15, color: colors.accentInk },
+  btnRow: { flexDirection: 'row', gap: 10 },
+  secondaryBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: radii.button,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryBtnText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
+
+  // Stats
+  statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15 },
+  statRowBorder: { borderTopWidth: 1, borderTopColor: colors.line },
+  statLabel: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted },
+  statValue: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text, ...tabularNums },
+
+  // Auto-deduct
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.icon,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  autoTitle: { fontFamily: fonts.bold, fontSize: 15, color: colors.text },
+  autoBody: { fontFamily: fonts.medium, fontSize: 12.5, lineHeight: 19, color: colors.muted },
+
+  // Benefits
+  perksHeader: { fontFamily: fonts.semibold, fontSize: 12, color: colors.muted, letterSpacing: 0.4 },
+  link: { fontFamily: fonts.semibold, fontSize: 13, color: colors.accent },
+  perkRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  perkText: { flex: 1, fontFamily: fonts.medium, fontSize: 14, color: colors.text },
+
+  // USSD
+  ussdIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ussdTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
+  ussdBody: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.muted, marginTop: 2 },
+});

@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Modal, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { client } from '../../api/client';
+import { colors, fonts, radii, tabularNums } from '../../theme';
+
+const ACCENT_SOFT = colors.accent + '14'; // accent at about 8% opacity
+const ACCENT_LINE = colors.accent + '33'; // accent at about 20% opacity
+const DANGER_SOFT = colors.danger + '12';
+const DANGER_LINE = colors.danger + '33';
 
 interface MerchantPaymentModalProps {
   visible: boolean;
@@ -182,24 +188,29 @@ export default function MerchantPaymentModal({
         if (step !== 'processing') handleDone();
       }}
     >
-      <View className="flex-1 bg-black/80 justify-end">
-        <View className="bg-slate-900 border-t border-slate-700 rounded-t-3xl p-6">
-          <View className="flex-row justify-between items-center mb-5">
-            <View className="flex-row items-center gap-2">
-              <View className="w-9 h-9 rounded-full bg-teal-500/20 items-center justify-center border border-teal-500/30">
-                <Feather name="shopping-bag" size={18} color="#34D399" />
+      <View style={st.overlay}>
+        <View style={st.sheet}>
+          <View style={st.handle} />
+
+          {/* Header */}
+          <View style={st.header}>
+            <View style={st.row}>
+              <View style={st.iconBox}>
+                <Feather name="shopping-bag" size={18} color={colors.accent} />
               </View>
               <View>
-                <Text className="text-white font-bold text-lg">Lipa na M-PESA</Text>
-                <Text className="text-slate-400 text-xs">Confirm your payment</Text>
+                <Text style={st.title}>Lipa na M-PESA</Text>
+                <Text style={st.subtitle}>Confirm your payment</Text>
               </View>
             </View>
             {step === 'preview' && (
               <TouchableOpacity
                 onPress={handleDone}
-                className="w-8 h-8 rounded-full bg-white/10 items-center justify-center"
+                style={st.closeBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
               >
-                <Feather name="x" size={18} color="#94A3B8" />
+                <Feather name="x" size={18} color={colors.text} />
               </TouchableOpacity>
             )}
           </View>
@@ -207,110 +218,98 @@ export default function MerchantPaymentModal({
           {step === 'preview' && (
             <>
               {quoteError ? (
-                <View className="bg-red-950/60 border border-red-500/30 rounded-2xl p-4 mb-4">
-                  <Text className="text-red-300 text-sm font-bold mb-1">
-                    Couldn’t load your payment details
-                  </Text>
-                  <Text className="text-slate-300 text-xs mb-3">
-                    Check your connection and try again. You have not been charged.
-                  </Text>
+                <View style={st.errorBox}>
+                  <Text style={st.errorTitle}>Couldn’t load your payment details</Text>
+                  <Text style={st.small}>Check your connection and try again. You have not been charged.</Text>
                   <TouchableOpacity
-                    className="bg-white/10 rounded-xl py-2 items-center"
+                    style={st.retryBtn}
                     onPress={() => setQuoteNonce((n) => n + 1)}
+                    accessibilityRole="button"
                   >
-                    <Text className="text-white font-bold text-sm">Retry</Text>
+                    <Text style={st.retryText}>Retry</Text>
                   </TouchableOpacity>
                 </View>
               ) : isQualifying ? (
-                <View className="bg-teal-950/60 border border-teal-500/30 rounded-2xl p-4 mb-4">
-                  <View className="flex-row items-center gap-2 mb-1">
-                    <Feather name="shield" size={16} color="#34D399" />
-                    <Text className="text-teal-400 font-bold text-sm">Smart SHIF Auto-Deduct Active</Text>
+                <View style={st.infoBox}>
+                  <View style={st.row}>
+                    <Feather name="shield" size={16} color={colors.accent} />
+                    <Text style={st.infoTitle}>Smart SHIF Auto-Deduct Active</Text>
                   </View>
-                  <Text className="text-slate-300 text-xs leading-relaxed">
-                    KES {merchantAmount} goes to {merchantName} and KES {shifAmount} goes to your SHIF
-                    healthcare cover. The M-PESA prompt will show the combined total of{' '}
-                    <Text className="text-white font-bold">KES {totalAmount}</Text>.
+                  <Text style={st.small}>
+                    KES {merchantAmount} goes to {merchantName} and KES {shifAmount} goes to your SHIF healthcare cover.
+                    The M-PESA prompt will show the combined total of <Text style={st.strong}>KES {totalAmount}</Text>.
                   </Text>
                 </View>
               ) : quoteReady && quote && quote.reason !== 'APPLIES' ? (
-                <View className="bg-slate-800/80 border border-slate-700 rounded-2xl p-4 mb-4">
-                  <Text className="text-slate-300 text-xs">{NO_SHIF_MESSAGE[quote.reason]}</Text>
+                <View style={st.neutralBox}>
+                  <Text style={st.small}>{NO_SHIF_MESSAGE[quote.reason]}</Text>
                 </View>
               ) : null}
 
-              <View className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-5">
-                <Text className="text-slate-400 text-xs font-bold mb-3">PAYMENT BREAKDOWN</Text>
+              {/* Breakdown */}
+              <View style={st.breakdown}>
+                <Text style={st.eyebrow}>PAYMENT BREAKDOWN</Text>
 
-                <View
-                  className={`flex-row justify-between items-center py-2 ${
-                    isQualifying ? 'border-b border-white/10' : ''
-                  }`}
-                >
-                  <View className="flex-1 pr-2">
-                    <Text className="text-white font-medium text-sm">{merchantName}</Text>
-                    <Text className="text-slate-500 text-xs">
+                <View style={[st.lineRow, isQualifying && st.lineRowBorder]}>
+                  <View style={st.flex1}>
+                    <Text style={st.lineTitle}>{merchantName}</Text>
+                    <Text style={st.tiny}>
                       Paybill {merchantPaybill} · Acc {merchantAccount}
                     </Text>
                   </View>
-                  <Text className="text-white font-bold text-base">KES {merchantAmount}</Text>
+                  <Text style={st.lineAmount}>KES {merchantAmount}</Text>
                 </View>
 
                 {isQualifying && (
-                  <View className="flex-row justify-between items-center py-2">
-                    <View>
-                      <Text className="text-teal-300 font-medium text-sm">SHIF Healthcare Cover</Text>
-                      <Text className="text-slate-500 text-xs">Paybill 200222 (SHA)</Text>
+                  <View style={st.lineRow}>
+                    <View style={st.flex1}>
+                      <Text style={st.shifTitle}>SHIF Healthcare Cover</Text>
+                      <Text style={st.tiny}>Paybill 200222 (SHA)</Text>
                     </View>
-                    <Text className="text-teal-300 font-bold text-base">KES {shifAmount}</Text>
+                    <Text style={st.shifAmount}>KES {shifAmount}</Text>
                   </View>
                 )}
 
-                <View className="flex-row justify-between items-center pt-3 mt-1 border-t border-white/10">
-                  <Text className="text-white font-bold">TOTAL TO PAY</Text>
+                <View style={st.totalRow}>
+                  <Text style={st.totalLabel}>TOTAL TO PAY</Text>
                   {quoteReady ? (
-                    <Text className="text-white font-bold text-xl">KES {totalAmount}</Text>
+                    <Text style={st.totalAmount}>KES {totalAmount}</Text>
                   ) : (
-                    <Text className="text-slate-500 font-bold text-xl">{quoteError ? '—' : '...'}</Text>
+                    <Text style={st.totalPlaceholder}>{quoteError ? '—' : '...'}</Text>
                   )}
                 </View>
               </View>
 
               <TouchableOpacity
-                className={`rounded-2xl py-4 items-center ${quoteReady ? 'bg-teal-500' : 'bg-slate-700'}`}
+                style={[st.payBtn, !quoteReady && st.payBtnDisabled]}
                 onPress={handlePay}
                 disabled={loading || !quoteReady}
+                accessibilityRole="button"
               >
-                <Text className="text-white font-bold text-base">
-                  {quoteReady
-                    ? `Pay KES ${totalAmount} with M-PESA`
-                    : quoteError
-                      ? 'Unavailable'
-                      : 'Checking...'}
+                <Text style={[st.payBtnText, !quoteReady && st.payBtnTextDisabled]}>
+                  {quoteReady ? `Pay KES ${totalAmount} with M-PESA` : quoteError ? 'Unavailable' : 'Checking...'}
                 </Text>
               </TouchableOpacity>
             </>
           )}
 
           {step === 'processing' && (
-            <View className="py-8 items-center">
-              <ActivityIndicator size="large" color="#34D399" />
-              <Text className="text-white text-sm mt-4 text-center">{statusMessage}</Text>
-              <Text className="text-slate-500 text-xs mt-2 text-center">
-                Please don't close this screen until the payment is confirmed.
-              </Text>
+            <View style={st.centerBlock}>
+              <ActivityIndicator size="large" color={colors.accent} />
+              <Text style={st.processingText}>{statusMessage}</Text>
+              <Text style={st.tinyCenter}>Please don't close this screen until the payment is confirmed.</Text>
             </View>
           )}
 
           {step === 'completed' && (
-            <View className="py-8 items-center">
-              <View className="w-16 h-16 bg-teal-500/20 rounded-full items-center justify-center mb-4">
-                <Feather name="check" size={32} color="#34D399" />
+            <View style={st.centerBlock}>
+              <View style={st.successRing}>
+                <Feather name="check" size={30} color={colors.accent} />
               </View>
-              <Text className="text-white font-bold text-lg mb-2">Payment confirmed</Text>
-              <Text className="text-slate-400 text-sm text-center mb-6">{statusMessage}</Text>
-              <TouchableOpacity className="bg-teal-500 rounded-2xl py-4 px-8" onPress={handleDone}>
-                <Text className="text-white font-bold">Done</Text>
+              <Text style={st.successTitle}>Payment confirmed</Text>
+              <Text style={st.successBody}>{statusMessage}</Text>
+              <TouchableOpacity style={st.doneBtn} onPress={handleDone} accessibilityRole="button">
+                <Text style={st.payBtnText}>Done</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -319,3 +318,131 @@ export default function MerchantPaymentModal({
     </Modal>
   );
 }
+
+const st = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(20,24,31,0.5)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: colors.line,
+    paddingHorizontal: 22,
+    paddingTop: 10,
+    paddingBottom: 32,
+    gap: 16,
+  },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.line, marginBottom: 4 },
+
+  // Layout helpers
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  flex1: { flex: 1, paddingRight: 8, gap: 2 },
+
+  // Header
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.icon,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, letterSpacing: -0.2 },
+  subtitle: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted, marginTop: 1 },
+  closeBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Text
+  small: { fontFamily: fonts.medium, fontSize: 12.5, lineHeight: 19, color: colors.muted },
+  tiny: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.muted },
+  tinyCenter: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted, textAlign: 'center' },
+  strong: { fontFamily: fonts.bold, color: colors.text, ...tabularNums },
+
+  // Notices
+  infoBox: { gap: 8, padding: 16, borderRadius: 16, backgroundColor: ACCENT_SOFT, borderWidth: 1, borderColor: ACCENT_LINE },
+  infoTitle: { fontFamily: fonts.bold, fontSize: 13, color: colors.accent },
+  neutralBox: { padding: 16, borderRadius: 16, backgroundColor: colors.ground, borderWidth: 1, borderColor: colors.line },
+  errorBox: { gap: 8, padding: 16, borderRadius: 16, backgroundColor: DANGER_SOFT, borderWidth: 1, borderColor: DANGER_LINE },
+  errorTitle: { fontFamily: fonts.bold, fontSize: 14, color: colors.danger },
+  retryBtn: {
+    height: 44,
+    marginTop: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retryText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
+
+  // Breakdown
+  breakdown: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.ground,
+  },
+  eyebrow: { fontFamily: fonts.semibold, fontSize: 11, letterSpacing: 0.9, color: colors.muted, marginBottom: 8 },
+  lineRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
+  lineRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.line },
+  lineTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
+  lineAmount: { fontFamily: fonts.bold, fontSize: 15, color: colors.text, ...tabularNums },
+  shifTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.accent },
+  shifAmount: { fontFamily: fonts.bold, fontSize: 15, color: colors.accent, ...tabularNums },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 14,
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
+  totalLabel: { fontFamily: fonts.bold, fontSize: 13, letterSpacing: 0.5, color: colors.text },
+  totalAmount: { fontFamily: fonts.bold, fontSize: 22, color: colors.text, letterSpacing: -0.4, ...tabularNums },
+  totalPlaceholder: { fontFamily: fonts.bold, fontSize: 22, color: colors.muted },
+
+  // Buttons
+  payBtn: { height: 52, borderRadius: radii.button, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  payBtnDisabled: { backgroundColor: colors.line },
+  payBtnText: { fontFamily: fonts.bold, fontSize: 16, color: colors.accentInk },
+  payBtnTextDisabled: { color: colors.muted },
+  doneBtn: {
+    height: 52,
+    minWidth: 160,
+    paddingHorizontal: 32,
+    borderRadius: radii.button,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+
+  // Processing and completed
+  centerBlock: { alignItems: 'center', paddingVertical: 24, gap: 12 },
+  processingText: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 22, color: colors.text, textAlign: 'center', marginTop: 4 },
+  successRing: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: colors.accent,
+    backgroundColor: ACCENT_SOFT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successTitle: { fontFamily: fonts.bold, fontSize: 20, color: colors.text, letterSpacing: -0.3 },
+  successBody: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 21, color: colors.muted, textAlign: 'center' },
+});
